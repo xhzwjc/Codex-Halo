@@ -17,6 +17,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalRect, PhysicalSize, State, WindowEvent,
 };
+#[cfg(target_os = "macos")]
+use tauri::{Position, Rect, Size};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_window_state::{Builder as WindowStateBuilder, StateFlags};
 
@@ -287,6 +289,38 @@ fn tray_summary(snapshot_state: &SnapshotState) -> String {
     format!("{}{suffix}", windows.join(" · "))
 }
 
+fn tray_title(snapshot_state: &SnapshotState) -> String {
+    let action = if snapshot_state.refreshing {
+        "…"
+    } else {
+        "↻"
+    };
+    format!("{}  {action}", tray_summary(snapshot_state))
+}
+
+fn refresh_hit_test(position_x: f64, rect_left: f64, rect_width: f64, rect_height: f64) -> bool {
+    if rect_width <= 0.0 || rect_height <= 0.0 {
+        return false;
+    }
+    let right = rect_left + rect_width;
+    let action_width = rect_height * 0.9;
+    position_x >= right - action_width && position_x <= right
+}
+
+#[cfg(target_os = "macos")]
+fn tray_refresh_hit(position: PhysicalPosition<f64>, rect: Rect) -> bool {
+    let (Position::Physical(rect_position), Size::Physical(rect_size)) = (rect.position, rect.size)
+    else {
+        return false;
+    };
+    refresh_hit_test(
+        position.x,
+        rect_position.x as f64,
+        rect_size.width as f64,
+        rect_size.height as f64,
+    )
+}
+
 fn tray_tooltip(snapshot_state: &SnapshotState) -> String {
     let summary = tray_summary(snapshot_state);
     let stale_expired = snapshot_state
@@ -327,7 +361,7 @@ fn publish_snapshot_state(app: &AppHandle, state: &AppState) {
     let tooltip = tray_tooltip(&snapshot_state);
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         #[cfg(target_os = "macos")]
-        let _ = tray.set_title(Some(summary.as_str()));
+        let _ = tray.set_title(Some(tray_title(&snapshot_state).as_str()));
         let _ = tray.set_tooltip(Some(tooltip.as_str()));
     }
     let status_item = {
@@ -792,7 +826,7 @@ fn setup_tray(app: &tauri::App, preferences: &WidgetPreferences) -> tauri::Resul
         .icon(tauri::include_image!("icons/tray-icon.png"));
     #[cfg(target_os = "macos")]
     {
-        builder = builder.icon_as_template(true).title("Codex …");
+        builder = builder.icon_as_template(true).title("Codex …  ↻");
     }
     builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
@@ -1093,12 +1127,18 @@ pub fn run() {
             if let TrayIconEvent::Click {
                 id,
                 position,
+                rect,
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
             {
                 if id.as_ref() == TRAY_ID {
+                    #[cfg(target_os = "macos")]
+                    if tray_refresh_hit(position, rect) {
+                        spawn_refresh(app, RefreshTrigger::Manual);
+                        return;
+                    }
                     let _ = show_panel_at(app, position, true);
                 }
             }
@@ -1264,6 +1304,35 @@ mod tests {
             ..weekly_only
         };
         assert_eq!(tray_summary(&short_only), "5h 74%");
+    }
+
+    #[test]
+    fn menu_bar_title_exposes_a_refresh_action_and_loading_feedback() {
+        let ready = SnapshotState {
+            snapshots: vec![snapshot("ok", None, Some(41.7))],
+            refreshing: false,
+            revision: 1,
+            last_attempt_at: None,
+            last_success_at: None,
+            next_refresh_at: None,
+        };
+        assert_eq!(tray_title(&ready), "W 42%  ↻");
+        assert_eq!(
+            tray_title(&SnapshotState {
+                refreshing: true,
+                ..ready
+            }),
+            "W 42%  …"
+        );
+    }
+
+    #[test]
+    fn menu_bar_refresh_hit_area_only_uses_the_trailing_control() {
+        assert!(!refresh_hit_test(130.0, 100.0, 100.0, 24.0));
+        assert!(!refresh_hit_test(177.0, 100.0, 100.0, 24.0));
+        assert!(refresh_hit_test(179.0, 100.0, 100.0, 24.0));
+        assert!(refresh_hit_test(199.0, 100.0, 100.0, 24.0));
+        assert!(!refresh_hit_test(201.0, 100.0, 100.0, 24.0));
     }
 
     #[test]
