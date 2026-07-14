@@ -30,7 +30,7 @@ Codex Halo does not store Codex tokens, account IDs, prompts, chats, raw quota r
 - This release is unsigned. Windows may show an unknown publisher warning; macOS may show a Gatekeeper warning.
 - Codex quota is read from non-public quota service responses and may stop working if the response shape changes.
 - The app shows stale/unavailable states instead of estimating quota.
-- macOS displays synchronized 5-hour and weekly quota text in the menu bar; Windows uses a tray icon and dynamic tooltip.
+- macOS displays synchronized text for the quota windows currently returned by Codex; Windows uses a tray icon and dynamic tooltip.
 - Windows and macOS builds share the same React/CSS UI and behavior layer.
 
 ## Checks

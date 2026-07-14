@@ -147,9 +147,10 @@ fn merge_snapshots(
             if next.status == "ok" || next.status == "signed_out" {
                 return next;
             }
-            let previous = current
-                .iter()
-                .find(|item| item.provider == next.provider && item.short_window.is_some());
+            let previous = current.iter().find(|item| {
+                item.provider == next.provider
+                    && (item.short_window.is_some() || item.weekly_window.is_some())
+            });
             if let Some(previous) = previous {
                 let mut stale = previous.clone();
                 stale.status = "stale".into();
@@ -248,30 +249,42 @@ fn tray_summary(snapshot_state: &SnapshotState) -> String {
         .or_else(|| snapshot_state.snapshots.first());
     let Some(snapshot) = snapshot else {
         return if snapshot_state.refreshing {
-            "5h … · W …".into()
+            "Codex …".into()
         } else {
-            "5h — · W —".into()
+            "Codex —".into()
         };
     };
-    if stale_values_expired(snapshot, chrono::Utc::now()) {
-        return "5h — · W —".into();
+    let hide_values = stale_values_expired(snapshot, chrono::Utc::now());
+    let mut windows = Vec::with_capacity(2);
+    if let Some(window) = &snapshot.short_window {
+        let value = if hide_values {
+            "—".into()
+        } else {
+            format!("{}%", rounded_percent(window.remaining_percent))
+        };
+        windows.push(format!("5h {value}"));
     }
-    let short = snapshot
-        .short_window
-        .as_ref()
-        .map(|window| format!("{}%", rounded_percent(window.remaining_percent)))
-        .unwrap_or_else(|| "—".into());
-    let weekly = snapshot
-        .weekly_window
-        .as_ref()
-        .map(|window| format!("{}%", rounded_percent(window.remaining_percent)))
-        .unwrap_or_else(|| "—".into());
-    let suffix = if snapshot.status == "stale" {
+    if let Some(window) = &snapshot.weekly_window {
+        let value = if hide_values {
+            "—".into()
+        } else {
+            format!("{}%", rounded_percent(window.remaining_percent))
+        };
+        windows.push(format!("W {value}"));
+    }
+    if windows.is_empty() {
+        return if snapshot_state.refreshing {
+            "Codex …".into()
+        } else {
+            "Codex —".into()
+        };
+    }
+    let suffix = if snapshot.status == "stale" && !hide_values {
         " ⚠︎"
     } else {
         ""
     };
-    format!("5h {short} · W {weekly}{suffix}")
+    format!("{}{suffix}", windows.join(" · "))
 }
 
 fn tray_tooltip(snapshot_state: &SnapshotState) -> String {
@@ -664,7 +677,7 @@ fn show_panel_near_cursor(app: &AppHandle, toggle: bool) {
 
 fn setup_tray(app: &tauri::App, preferences: &WidgetPreferences) -> tauri::Result<TrayMenuItems> {
     let english = preferences.language == "en";
-    let status = MenuItem::with_id(app, "status", "5h … · W …", false, None::<&str>)?;
+    let status = MenuItem::with_id(app, "status", "Codex …", false, None::<&str>)?;
     let details = MenuItem::with_id(
         app,
         "details",
@@ -779,7 +792,7 @@ fn setup_tray(app: &tauri::App, preferences: &WidgetPreferences) -> tauri::Resul
         .icon(tauri::include_image!("icons/tray-icon.png"));
     #[cfg(target_os = "macos")]
     {
-        builder = builder.icon_as_template(true).title("5h … · W …");
+        builder = builder.icon_as_template(true).title("Codex …");
     }
     builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
@@ -1175,6 +1188,19 @@ mod tests {
     }
 
     #[test]
+    fn transient_failure_keeps_weekly_only_values_as_stale() {
+        let previous = snapshot("ok", None, Some(42.0));
+        let mut failure = snapshot("unavailable", None, None);
+        failure.message = Some("Network unavailable".into());
+        let result = merge_snapshots(&[previous], vec![failure]);
+        assert_eq!(result[0].status, "stale");
+        assert_eq!(
+            result[0].weekly_window.as_ref().unwrap().remaining_percent,
+            42.0
+        );
+    }
+
+    #[test]
     fn signed_out_replaces_last_values() {
         let previous = snapshot("ok", Some(74.0), Some(42.0));
         let result = merge_snapshots(&[previous], vec![snapshot("signed_out", None, None)]);
@@ -1219,6 +1245,25 @@ mod tests {
             next_refresh_at: None,
         };
         assert_eq!(tray_summary(&state), "5h 74% · W 42% ⚠︎");
+    }
+
+    #[test]
+    fn menu_bar_adapts_to_the_windows_returned_by_the_service() {
+        let weekly_only = SnapshotState {
+            snapshots: vec![snapshot("ok", None, Some(41.7))],
+            refreshing: false,
+            revision: 1,
+            last_attempt_at: None,
+            last_success_at: None,
+            next_refresh_at: None,
+        };
+        assert_eq!(tray_summary(&weekly_only), "W 42%");
+
+        let short_only = SnapshotState {
+            snapshots: vec![snapshot("ok", Some(74.2), None)],
+            ..weekly_only
+        };
+        assert_eq!(tray_summary(&short_only), "5h 74%");
     }
 
     #[test]

@@ -269,9 +269,68 @@ fn find_window<'a>(
     names: &[&str],
     expected_seconds: u64,
 ) -> Option<&'a Value> {
+    const DIRECT_WINDOW_KEYS: [&str; 16] = [
+        "primary_window",
+        "primaryWindow",
+        "secondary_window",
+        "secondaryWindow",
+        "short_window",
+        "shortWindow",
+        "five_hour_window",
+        "fiveHourWindow",
+        "weekly_window",
+        "weeklyWindow",
+        "week_window",
+        "weekWindow",
+        "5h",
+        "primary",
+        "weekly",
+        "secondary",
+    ];
+
+    let matches_duration = |window: &UsageWindow| {
+        expected_seconds > 0
+            && window.window_seconds > 0
+            && window.window_seconds.abs_diff(expected_seconds) <= 60
+    };
+
+    // Window roles can change independently of their field names. Prefer the
+    // explicit duration so a temporary weekly-only `primary_window` is not
+    // mistaken for the historical 5-hour primary window.
+    for key in DIRECT_WINDOW_KEYS {
+        let Some(value) = rate_limit.get(key) else {
+            continue;
+        };
+        if parse_window(Some(value)).is_some_and(|window| matches_duration(&window)) {
+            return Some(value);
+        }
+    }
+
+    for key in [
+        "windows",
+        "limit_windows",
+        "limitWindows",
+        "limits",
+        "buckets",
+    ] {
+        let Some(items) = rate_limit.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        for item in items {
+            let Some(window) = parse_window(Some(item)) else {
+                continue;
+            };
+            if matches_duration(&window) {
+                return Some(item);
+            }
+        }
+    }
+
+    // Older payloads sometimes omit duration. In that case, and only then,
+    // fall back to the established semantic field or bucket name.
     for name in names {
         if let Some(value) = rate_limit.get(*name) {
-            if parse_window(Some(value)).is_some() {
+            if parse_window(Some(value)).is_some_and(|window| window.window_seconds == 0) {
                 return Some(value);
             }
         }
@@ -291,24 +350,55 @@ fn find_window<'a>(
             let Some(window) = parse_window(Some(item)) else {
                 continue;
             };
-            let matches_duration =
-                expected_seconds > 0 && window.window_seconds.abs_diff(expected_seconds) <= 60;
-            let matches_name = pick_string(item, &["name", "type", "id", "window", "label"])
-                .map(|text| {
-                    let lower = text.to_ascii_lowercase();
-                    names.iter().any(|name| {
-                        lower == name.to_ascii_lowercase()
-                            || lower.contains(&name.to_ascii_lowercase())
+            let matches_name = window.window_seconds == 0
+                && pick_string(item, &["name", "type", "id", "window", "label"])
+                    .map(|text| {
+                        let lower = text.to_ascii_lowercase();
+                        names.iter().any(|name| {
+                            lower == name.to_ascii_lowercase()
+                                || lower.contains(&name.to_ascii_lowercase())
+                        })
                     })
-                })
-                .unwrap_or(false);
-            if matches_duration || matches_name {
+                    .unwrap_or(false);
+            if matches_name {
                 return Some(item);
             }
         }
     }
 
     None
+}
+
+fn parse_usage_windows(rate_limit: &Value) -> (Option<UsageWindow>, Option<UsageWindow>) {
+    let short_window = parse_window(find_window(
+        rate_limit,
+        &[
+            "primary_window",
+            "primaryWindow",
+            "short_window",
+            "shortWindow",
+            "five_hour_window",
+            "fiveHourWindow",
+            "5h",
+            "primary",
+        ],
+        18_000,
+    ));
+    let weekly_window = parse_window(find_window(
+        rate_limit,
+        &[
+            "secondary_window",
+            "secondaryWindow",
+            "weekly_window",
+            "weeklyWindow",
+            "week_window",
+            "weekWindow",
+            "weekly",
+            "secondary",
+        ],
+        604_800,
+    ));
+    (short_window, weekly_window)
 }
 
 fn safe_http_failure(status: reqwest::StatusCode) -> (&'static str, &'static str) {
@@ -380,38 +470,11 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         .get("rate_limit")
         .or_else(|| usage.get("rateLimit"))
         .unwrap_or(&usage);
-    let short_window = parse_window(find_window(
-        rate_limit,
-        &[
-            "primary_window",
-            "primaryWindow",
-            "short_window",
-            "shortWindow",
-            "five_hour_window",
-            "fiveHourWindow",
-            "5h",
-            "primary",
-        ],
-        18_000,
-    ));
-    let weekly_window = parse_window(find_window(
-        rate_limit,
-        &[
-            "secondary_window",
-            "secondaryWindow",
-            "weekly_window",
-            "weeklyWindow",
-            "week_window",
-            "weekWindow",
-            "weekly",
-            "secondary",
-        ],
-        604_800,
-    ));
-    if short_window.is_none() {
+    let (short_window, weekly_window) = parse_usage_windows(rate_limit);
+    if short_window.is_none() && weekly_window.is_none() {
         return ProviderSnapshot::failure(
             "unavailable",
-            "Quota response is missing the 5h window.",
+            "Quota response does not contain a supported usage window.",
         );
     }
 
@@ -580,5 +643,31 @@ mod tests {
         .unwrap();
         assert_eq!(short.remaining_percent, 51.0);
         assert_eq!(weekly.remaining_percent, 88.0);
+    }
+
+    #[test]
+    fn classifies_weekly_only_primary_window_by_duration() {
+        let rate_limit = serde_json::json!({
+            "primary_window": {
+                "remaining_percent": 63,
+                "limit_window_seconds": 604800
+            }
+        });
+        let (short, weekly) = parse_usage_windows(&rate_limit);
+        assert!(short.is_none());
+        assert_eq!(weekly.unwrap().remaining_percent, 63.0);
+    }
+
+    #[test]
+    fn keeps_five_hour_only_payloads_compatible() {
+        let rate_limit = serde_json::json!({
+            "primaryWindow": {
+                "remainingPercent": 81,
+                "windowSeconds": 18000
+            }
+        });
+        let (short, weekly) = parse_usage_windows(&rate_limit);
+        assert_eq!(short.unwrap().remaining_percent, 81.0);
+        assert!(weekly.is_none());
     }
 }

@@ -4,7 +4,7 @@ Native-feeling desktop quota monitor for the local Codex Desktop login state, wi
 
 ## Highlights
 
-- Shows your Codex plan, 5-hour quota, weekly quota, next reset time, and reset-credit availability.
+- Shows your Codex plan, every usage window currently returned by Codex (including weekly-only or 5-hour + weekly modes), next reset time, and reset-credit availability.
 - Displays compact live quota text in the macOS menu bar; Windows falls back to a tray icon, tooltip, and context menu.
 - Uses clear quota states for healthy, caution, and critical remaining usage.
 - Collapses into a small floating orb when idle, then expands on hover.

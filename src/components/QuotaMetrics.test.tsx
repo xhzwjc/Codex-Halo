@@ -52,11 +52,20 @@ describe("QuotaMetrics", () => {
     expect(refresh).toHaveBeenCalledOnce();
   });
 
-  it("shows partial weekly data without fabricating the missing 5-hour value", () => {
-    render(<QuotaMetrics snapshot={{ ...success, status: "unavailable", shortWindow: null }} language="en" />);
-    expect(screen.getByText("Some quota data is unavailable")).toBeInTheDocument();
+  it("shows a weekly-only payload without inventing a 5-hour window", () => {
+    render(<QuotaMetrics snapshot={{ ...success, shortWindow: null }} language="en" />);
+    expect(screen.getByText("Weekly quota")).toBeInTheDocument();
     expect(screen.getByText("8")).toBeInTheDocument();
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("5-hour quota")).not.toBeInTheDocument();
+    expect(screen.queryByText("Some quota data is unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("keeps the historical 5-hour-only payload compatible", () => {
+    render(<QuotaMetrics snapshot={{ ...success, weeklyWindow: null }} language="en" />);
+    expect(screen.getByText("5-hour quota")).toBeInTheDocument();
+    expect(screen.getByText("74")).toBeInTheDocument();
+    expect(screen.queryByText("Weekly quota")).not.toBeInTheDocument();
   });
 
   it("does not misreport a transient auth read failure as signed out", () => {
