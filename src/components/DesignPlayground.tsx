@@ -130,7 +130,7 @@ export function DesignPlayground() {
       </section>
       <aside className="design-controls">
         <div>
-          <p className="design-kicker">QUOTA FLOAT</p>
+          <p className="design-kicker">CODEX HALO</p>
           <h1>Visual Tuning</h1>
           <p className="design-description">Preview changes live, then apply the chosen values to the desktop widget.</p>
         </div>

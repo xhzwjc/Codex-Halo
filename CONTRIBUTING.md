@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Quota Float.
+Thanks for helping improve Codex Halo.
 
 ## Before Opening Issues
 

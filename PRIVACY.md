@@ -1,6 +1,6 @@
 # Privacy
 
-Quota Float is designed to be local-first and minimal.
+Codex Halo is designed to be local-first and minimal.
 
 ## What It Reads
 
@@ -10,12 +10,14 @@ Quota Float is designed to be local-first and minimal.
 
 ## What It Stores
 
-Quota Float stores only widget preferences in its own application config directory:
+Codex Halo stores only widget preferences in its own application config directory:
 
+- floating-widget visibility
 - locked state
 - always-on-top state
 - pinned provider
 - auto-rotate interval
+- interface language
 
 It does not copy or persist Codex tokens, account IDs, raw quota responses, user prompts, chat history, or local file paths.
 
@@ -34,4 +36,4 @@ Logs are intentionally generic. They must not include tokens, account IDs, raw b
 
 ## Accuracy Boundary
 
-Quota Float displays quota windows returned by the Codex quota service. It does not estimate quota from local token usage and does not fabricate values when the response shape is unknown.
+Codex Halo displays quota windows returned by the Codex quota service. It does not estimate quota from local token usage and does not fabricate values when the response shape is unknown.

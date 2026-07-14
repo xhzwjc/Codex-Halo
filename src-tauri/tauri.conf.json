@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Quota Float",
+  "productName": "Codex Halo",
   "version": "0.1.3",
   "identifier": "app.quotafloat.desktop",
   "build": {
@@ -13,22 +13,43 @@
     "windows": [
       {
         "label": "widget",
-        "title": "Quota Float",
-        "width": 100,
-        "height": 100,
-        "minWidth": 80,
-        "minHeight": 80,
-        "maxWidth": 360,
-        "maxHeight": 360,
-        "resizable": true,
+        "title": "Codex Halo",
+        "width": 92,
+        "height": 92,
+        "minWidth": 92,
+        "minHeight": 92,
+        "maxWidth": 336,
+        "maxHeight": 356,
+        "resizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": false,
-        "visible": true
+        "visible": false,
+        "backgroundColor": "#00000000"
+      },
+      {
+        "label": "panel",
+        "title": "Codex Halo",
+        "url": "index.html?view=panel",
+        "width": 376,
+        "height": 660,
+        "minWidth": 376,
+        "minHeight": 660,
+        "maxWidth": 376,
+        "maxHeight": 660,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": true,
+        "visible": false,
+        "backgroundColor": "#00000000"
       }
     ],
+    "macOSPrivateApi": true,
     "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:" }
   },
   "bundle": {
@@ -37,7 +58,7 @@
     "category": "Utility",
     "shortDescription": "Codex quota at a glance",
     "longDescription": "A lightweight floating desktop card for Codex usage limits.",
-    "copyright": "Copyright Quota Float contributors",
+    "copyright": "Copyright Codex Halo contributors",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderSnapshot } from "../types";
-import { mergeSnapshots } from "./snapshots";
+import { emptySnapshot, mergeSnapshots } from "./snapshots";
 
 const success: ProviderSnapshot = {
   provider: "codex",
@@ -32,5 +32,23 @@ describe("snapshot failure handling", () => {
 
   it("replaces stale data after recovery", () => {
     expect(mergeSnapshots([{ ...success, status: "stale" }], [{ ...success, shortWindow: { ...success.shortWindow!, remainingPercent: 88 } }])[0].shortWindow?.remainingPercent).toBe(88);
+  });
+
+  it("keeps explicit partial data instead of replacing it with older values", () => {
+    const partial: ProviderSnapshot = {
+      ...success,
+      status: "unavailable",
+      shortWindow: null,
+      weeklyWindow: { ...success.weeklyWindow!, remainingPercent: 31 },
+      message: "The 5h window is unavailable",
+    };
+    expect(mergeSnapshots([success], [partial])[0]).toEqual(partial);
+  });
+
+  it("creates an unavailable shell without quota values", () => {
+    const value = emptySnapshot("unavailable", null);
+    expect(value.shortWindow).toBeNull();
+    expect(value.weeklyWindow).toBeNull();
+    expect(value.resetCredits).toBeNull();
   });
 });
