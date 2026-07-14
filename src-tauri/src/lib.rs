@@ -27,8 +27,8 @@ const FAST_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_FAILURE_BACKOFF: Duration = Duration::from_secs(30 * 60);
 const STALE_VALUE_MAX_AGE: Duration = Duration::from_secs(30 * 60);
 const PANEL_MARGIN: i32 = 8;
-const PANEL_LOGICAL_WIDTH: f64 = 376.0;
-const PANEL_LOGICAL_HEIGHT: f64 = 660.0;
+const PANEL_LOGICAL_WIDTH: f64 = 384.0;
+const PANEL_LOGICAL_HEIGHT: f64 = 668.0;
 const PANEL_BLUR_DISMISS_DELAY: Duration = Duration::from_millis(160);
 
 #[derive(Default)]
@@ -1241,19 +1241,19 @@ mod tests {
     fn panel_stays_inside_negative_origin_work_area() {
         let position = panel_position(
             PhysicalPosition::new(-30.0, 0.0),
-            PhysicalSize::new(376, 660),
+            PhysicalSize::new(384, 668),
             PhysicalRect {
                 position: PhysicalPosition::new(-1280, 24),
                 size: PhysicalSize::new(1280, 960),
             },
         );
-        assert_eq!(position, PhysicalPosition::new(-384, 32));
+        assert_eq!(position, PhysicalPosition::new(-392, 32));
     }
 
     #[test]
     fn panel_uses_target_monitor_scale_for_mixed_dpi_positioning() {
-        assert_eq!(panel_physical_size(1.0), PhysicalSize::new(376, 660));
-        assert_eq!(panel_physical_size(2.0), PhysicalSize::new(752, 1320));
+        assert_eq!(panel_physical_size(1.0), PhysicalSize::new(384, 668));
+        assert_eq!(panel_physical_size(2.0), PhysicalSize::new(768, 1336));
         let position = panel_position(
             PhysicalPosition::new(3_000.0, 24.0),
             panel_physical_size(2.0),
@@ -1262,6 +1262,6 @@ mod tests {
                 size: PhysicalSize::new(3840, 2112),
             },
         );
-        assert_eq!(position, PhysicalPosition::new(2624, 56));
+        assert_eq!(position, PhysicalPosition::new(2616, 56));
     }
 }
