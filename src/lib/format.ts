@@ -2,6 +2,15 @@ import { copy, normalizeLanguage } from "./i18n";
 import type { Language, ProviderSnapshot, QuotaTier } from "../types";
 
 const STALE_EXPIRY_MS = 30 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
+
+export type ResetCreditUrgency = "normal" | "soon" | "warning" | "critical" | "expired" | "unknown";
+
+export interface ResetCreditExpiryState {
+  urgency: ResetCreditUrgency;
+  daysRemaining: number | null;
+  expiresAt: number | null;
+}
 
 export function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, Math.round(value)));
@@ -77,4 +86,21 @@ export function formatDateTime(value: string, language: Language): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t.creditExpiresUnknown;
   return new Intl.DateTimeFormat(language === "en" ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+export function resetCreditExpiryState(value: string | null | undefined, now = new Date()): ResetCreditExpiryState {
+  if (!value) return { urgency: "unknown", daysRemaining: null, expiresAt: null };
+  const expiresAt = new Date(value).getTime();
+  if (!Number.isFinite(expiresAt)) return { urgency: "unknown", daysRemaining: null, expiresAt: null };
+  const remaining = expiresAt - now.getTime();
+  if (remaining <= 0) return { urgency: "expired", daysRemaining: 0, expiresAt };
+  const daysRemaining = Math.max(1, Math.ceil(remaining / DAY_MS));
+  const urgency: ResetCreditUrgency = daysRemaining === 1
+    ? "critical"
+    : daysRemaining === 2
+      ? "warning"
+      : daysRemaining === 3
+        ? "soon"
+        : "normal";
+  return { urgency, daysRemaining, expiresAt };
 }

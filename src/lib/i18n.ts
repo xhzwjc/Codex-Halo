@@ -15,6 +15,19 @@ export const copy = {
     controls: "悬浮窗控制",
     creditExpiresUnknown: "到期时间未知",
     creditItem: (index: number, label: string) => `第 ${index + 1} 次：${label}`,
+    creditName: (index: number) => `重置卡 ${index + 1}`,
+    creditEarliestExpiry: (date: string) => `最早 ${date} 到期`,
+    creditCountdown: (days: number) => days === 1
+      ? "1 天内到期，请及时使用"
+      : days === 2
+        ? "仅剩 2 天，建议尽快使用"
+        : days === 3
+          ? "剩 3 天，记得使用"
+          : `剩 ${days} 天`,
+    creditExpired: "已到期，等待额度同步",
+    creditExpiryDetails: "重置卡到期详情",
+    creditUseBefore: (date: string) => `${date} 前使用`,
+    hide: "收起",
     dataSynced: "数据已同步",
     dataStale: "正在显示上次成功数据",
     dateUnknown: "日期未知",
@@ -86,6 +99,19 @@ export const copy = {
     controls: "Floating window controls",
     creditExpiresUnknown: "Expiration unknown",
     creditItem: (index: number, label: string) => `Credit ${index + 1}: ${label}`,
+    creditName: (index: number) => `Reset credit ${index + 1}`,
+    creditEarliestExpiry: (date: string) => `Earliest expiry ${date}`,
+    creditCountdown: (days: number) => days === 1
+      ? "Expires within 1 day — use it soon"
+      : days === 2
+        ? "Only 2 days left — use it soon"
+        : days === 3
+          ? "3 days left — remember to use it"
+          : `${days} days left`,
+    creditExpired: "Expired — waiting for quota sync",
+    creditExpiryDetails: "Reset credit expiry details",
+    creditUseBefore: (date: string) => `Use before ${date}`,
+    hide: "Hide",
     dataSynced: "Data synced",
     dataStale: "Showing the last successful update",
     dateUnknown: "Date unknown",

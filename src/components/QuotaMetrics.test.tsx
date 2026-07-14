@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshot } from "../types";
 import { QuotaMetrics } from "./QuotaMetrics";
@@ -19,7 +19,10 @@ const success: ProviderSnapshot = {
   message: null,
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("QuotaMetrics", () => {
   it("shows both real windows and distinguishes zero reset credits", () => {
@@ -66,6 +69,31 @@ describe("QuotaMetrics", () => {
     expect(screen.getByText("5-hour quota")).toBeInTheDocument();
     expect(screen.getByText("74")).toBeInTheDocument();
     expect(screen.queryByText("Weekly quota")).not.toBeInTheDocument();
+  });
+
+  it("shows stepped expiration warnings for every reset credit", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-14T12:00:00Z"));
+    render(
+      <QuotaMetrics
+        snapshot={{
+          ...success,
+          resetCredits: 3,
+          resetCreditExpiresAt: [
+            "2026-07-17T12:00:00Z",
+            "2026-07-15T12:00:00Z",
+            "2026-07-16T12:00:00Z",
+          ],
+        }}
+        language="zh-CN"
+      />,
+    );
+    expect(screen.getByTitle(/最早.*1 天内到期，请及时使用/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看" }));
+    expect(screen.getByText("重置卡到期详情")).toBeInTheDocument();
+    expect(screen.getByText("剩 3 天，记得使用").closest(".credit-item")).toHaveClass("credit-item--soon");
+    expect(screen.getByText("仅剩 2 天，建议尽快使用").closest(".credit-item")).toHaveClass("credit-item--warning");
+    expect(screen.getByText("1 天内到期，请及时使用").closest(".credit-item")).toHaveClass("credit-item--critical");
   });
 
   it("does not misreport a transient auth read failure as signed out", () => {
