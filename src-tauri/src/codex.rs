@@ -16,6 +16,36 @@ struct Auth {
     account_id: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+struct AuthFailure {
+    status: &'static str,
+    message: &'static str,
+}
+
+impl AuthFailure {
+    const fn signed_out(message: &'static str) -> Self {
+        Self {
+            status: "signed_out",
+            message,
+        }
+    }
+
+    const fn unavailable(message: &'static str) -> Self {
+        Self {
+            status: "unavailable",
+            message,
+        }
+    }
+}
+
+fn auth_metadata_failure(error: &std::io::Error) -> AuthFailure {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        AuthFailure::signed_out("Please sign in to Codex Desktop first.")
+    } else {
+        AuthFailure::unavailable("Codex login data is temporarily unavailable.")
+    }
+}
+
 fn auth_path() -> Option<PathBuf> {
     std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
@@ -41,18 +71,23 @@ fn account_id_from_jwt(token: &str) -> Option<String> {
     .map(str::to_owned)
 }
 
-fn load_auth() -> Result<Auth, &'static str> {
-    let path = auth_path().ok_or("Codex login was not found.")?;
-    let metadata = fs::metadata(&path).map_err(|_| "Please sign in to Codex Desktop first.")?;
+fn load_auth() -> Result<Auth, AuthFailure> {
+    let path = auth_path().ok_or_else(|| {
+        AuthFailure::unavailable("Codex login location is temporarily unavailable.")
+    })?;
+    let metadata = fs::metadata(&path).map_err(|error| auth_metadata_failure(&error))?;
     if !metadata.is_file() || metadata.len() > MAX_AUTH_BYTES {
-        return Err("Codex login data is unavailable.");
+        return Err(AuthFailure::unavailable(
+            "Codex login data is temporarily unavailable.",
+        ));
     }
-    let raw = fs::read_to_string(path).map_err(|_| "Please sign in to Codex Desktop first.")?;
-    let value: Value =
-        serde_json::from_str(&raw).map_err(|_| "Codex login format has changed.")?;
+    let raw = fs::read_to_string(path)
+        .map_err(|_| AuthFailure::unavailable("Codex login data is temporarily unavailable."))?;
+    let value: Value = serde_json::from_str(&raw)
+        .map_err(|_| AuthFailure::unavailable("Codex login format has changed."))?;
     let tokens = value.get("tokens").unwrap_or(&value);
     let access_token = pick_string(tokens, &["access_token", "accessToken"])
-        .ok_or("Codex login expired. Please sign in again.")?
+        .ok_or_else(|| AuthFailure::signed_out("Codex login expired. Please sign in again."))?
         .to_owned();
     let account_id = pick_string(tokens, &["account_id", "accountId"])
         .map(str::to_owned)
@@ -242,7 +277,13 @@ fn find_window<'a>(
         }
     }
 
-    for key in ["windows", "limit_windows", "limitWindows", "limits", "buckets"] {
+    for key in [
+        "windows",
+        "limit_windows",
+        "limitWindows",
+        "limits",
+        "buckets",
+    ] {
         let Some(items) = rate_limit.get(key).and_then(Value::as_array) else {
             continue;
         };
@@ -277,10 +318,7 @@ fn safe_http_failure(status: reqwest::StatusCode) -> (&'static str, &'static str
             "unavailable",
             "Quota service is rate limited. It will retry automatically.",
         ),
-        _ => (
-            "unavailable",
-            "Quota service is temporarily unavailable.",
-        ),
+        _ => ("unavailable", "Quota service is temporarily unavailable."),
     }
 }
 
@@ -304,7 +342,7 @@ async fn limited_json(mut response: reqwest::Response) -> Result<Value, ()> {
 pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
     let auth = match load_auth() {
         Ok(value) => value,
-        Err(message) => return ProviderSnapshot::failure("signed_out", message),
+        Err(failure) => return ProviderSnapshot::failure(failure.status, failure.message),
     };
     let request_headers = match headers(&auth) {
         Ok(value) => value,
@@ -312,7 +350,10 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
     };
 
     let (usage_result, credits_result) = tokio::join!(
-        client.get(USAGE_URL).headers(request_headers.clone()).send(),
+        client
+            .get(USAGE_URL)
+            .headers(request_headers.clone())
+            .send(),
         client.get(CREDITS_URL).headers(request_headers).send(),
     );
 
@@ -332,10 +373,7 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
     let usage: Value = match limited_json(usage_response).await {
         Ok(value) => value,
         Err(_) => {
-            return ProviderSnapshot::failure(
-                "unavailable",
-                "Quota response format has changed.",
-            )
+            return ProviderSnapshot::failure("unavailable", "Quota response format has changed.")
         }
     };
     let rate_limit = usage
@@ -371,7 +409,10 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         604_800,
     ));
     if short_window.is_none() {
-        return ProviderSnapshot::failure("unavailable", "Quota response is missing the 5h window.");
+        return ProviderSnapshot::failure(
+            "unavailable",
+            "Quota response is missing the 5h window.",
+        );
     }
 
     let usage_credits = usage
@@ -440,6 +481,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn distinguishes_missing_login_from_transient_auth_io_failures() {
+        let missing = auth_metadata_failure(&std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert_eq!(missing.status, "signed_out");
+
+        let unreadable =
+            auth_metadata_failure(&std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert_eq!(unreadable.status, "unavailable");
+    }
+
+    #[test]
     fn parses_both_window_shapes() {
         let snake = serde_json::json!({
             "used_percent": 26,
@@ -500,7 +551,9 @@ mod tests {
 
         let explicit_used = serde_json::json!({"used_percent": 0.4, "windowSeconds": 18000});
         assert_eq!(
-            parse_window(Some(&explicit_used)).unwrap().remaining_percent,
+            parse_window(Some(&explicit_used))
+                .unwrap()
+                .remaining_percent,
             99.6
         );
     }
@@ -513,12 +566,18 @@ mod tests {
                 {"name": "primary", "remainingPercent": 51, "windowSeconds": 18000}
             ]
         });
-        let short =
-            parse_window(find_window(&rate_limit, &["primary_window", "primary"], 18_000))
-                .unwrap();
-        let weekly =
-            parse_window(find_window(&rate_limit, &["secondary_window", "weekly"], 604_800))
-                .unwrap();
+        let short = parse_window(find_window(
+            &rate_limit,
+            &["primary_window", "primary"],
+            18_000,
+        ))
+        .unwrap();
+        let weekly = parse_window(find_window(
+            &rate_limit,
+            &["secondary_window", "weekly"],
+            604_800,
+        ))
+        .unwrap();
         assert_eq!(short.remaining_percent, 51.0);
         assert_eq!(weekly.remaining_percent, 88.0);
     }

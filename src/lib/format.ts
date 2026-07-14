@@ -1,15 +1,47 @@
 import { copy, normalizeLanguage } from "./i18n";
-import type { Language, ProviderSnapshot } from "../types";
+import type { Language, ProviderSnapshot, QuotaTier } from "../types";
+
+const STALE_EXPIRY_MS = 30 * 60_000;
 
 export function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
-export function quotaTier(percent: number | null): "unknown" | "healthy" | "caution" | "critical" {
+export function normalizePercent(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? clampPercent(value) : null;
+}
+
+export function quotaTier(percent: number | null): QuotaTier {
   if (percent === null) return "unknown";
   if (percent >= 50) return "healthy";
   if (percent >= 10) return "caution";
   return "critical";
+}
+
+export function overallQuotaTier(snapshot: ProviderSnapshot): QuotaTier {
+  const values = [
+    normalizePercent(snapshot.shortWindow?.remainingPercent),
+    normalizePercent(snapshot.weeklyWindow?.remainingPercent),
+  ].filter((value): value is number => value !== null);
+  return values.length > 0 ? quotaTier(Math.min(...values)) : "unknown";
+}
+
+export function isStaleExpired(snapshot: ProviderSnapshot, now = new Date()): boolean {
+  if (snapshot.status !== "stale") return false;
+  const updatedAt = new Date(snapshot.updatedAt).getTime();
+  return !Number.isFinite(updatedAt) || now.getTime() - updatedAt > STALE_EXPIRY_MS;
+}
+
+export function formatUpdatedTime(value: string | null, now = new Date(), language: Language = "zh-CN"): string {
+  const t = copy[normalizeLanguage(language)];
+  if (!value) return t.dateUnknown;
+  const updatedAt = new Date(value).getTime();
+  if (!Number.isFinite(updatedAt)) return t.dateUnknown;
+  const minutes = Math.max(0, Math.floor((now.getTime() - updatedAt) / 60_000));
+  if (minutes < 1) return t.updatedNow;
+  if (minutes < 60) return t.updatedMinutesAgo(minutes);
+  if (minutes < 24 * 60) return t.updatedHoursAgo(Math.floor(minutes / 60));
+  return formatDateTime(value, language);
 }
 
 export function formatResetTime(value: string | null, now = new Date(), language: Language = "zh-CN"): string {
@@ -26,13 +58,6 @@ export function formatResetTime(value: string | null, now = new Date(), language
   if (hours < 24) return t.resetInHours(hours, rest);
   const days = Math.floor(hours / 24);
   return t.resetInDays(days, hours % 24);
-}
-
-export function needsFastRefresh(snapshot: ProviderSnapshot, now = new Date()): boolean {
-  const reset = snapshot.shortWindow?.resetsAt;
-  if (!reset) return false;
-  const remaining = new Date(reset).getTime() - now.getTime();
-  return remaining > -5 * 60_000 && remaining <= 15 * 60_000;
 }
 
 export function formatResetDate(value: string | null, language: Language = "zh-CN"): string {

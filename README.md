@@ -1,31 +1,25 @@
-# Quota Float
+# Codex Halo
 
-Lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
-
-![Quota Float quota states](docs/images/quota-states.png)
+Native-feeling desktop quota monitor for the local Codex Desktop login state, with a compact floating widget and a synchronized macOS menu bar panel.
 
 ## Highlights
 
-- Shows your Codex plan, 5-hour quota, weekly quota, and next reset time in a compact always-on-top widget.
+- Shows your Codex plan, 5-hour quota, weekly quota, next reset time, and reset-credit availability.
+- Displays compact live quota text in the macOS menu bar; Windows falls back to a tray icon, tooltip, and context menu.
 - Uses clear quota states for healthy, caution, and critical remaining usage.
 - Collapses into a small floating orb when idle, then expands on hover.
-- Indicates whether quota is currently being consumed.
-- Includes quick controls for language switching and always-on-top behavior.
+- Opens a dedicated quota panel from the menu bar with refresh, widget visibility, always-on-top, click-through, launch-at-login, language, and quit controls.
+- Keeps the menu bar, detail panel, and floating window synchronized through one Rust-owned state coordinator.
+- Refreshes every five minutes when healthy, every minute around reset boundaries, and uses bounded exponential backoff after failures; manual refreshes are serialized and debounced.
 - Shows reset credit count and available reset-credit expiration times when the quota service provides them.
 - Handles stale data, signed-out sessions, unavailable quota responses, and loading states without fabricating values.
-
-## Screenshots
-
-| Quota states | Floating orb | Reset credit expiration |
-| --- | --- | --- |
-| ![Healthy, caution, and critical quota states](docs/images/quota-states.png) | ![Collapsed quota orb](docs/images/quota-orb.png) | ![Reset credit expiration popover](docs/images/quota-reset-expiration.png) |
 
 ## Repository Metadata
 
 Suggested repository description:
 
 ```text
-Floating Windows/macOS desktop widget for checking Codex quota from the local Codex Desktop login state.
+Windows/macOS menu bar and floating desktop monitor for Codex quota from the local Codex Desktop login state.
 ```
 
 Suggested topics:
@@ -36,17 +30,17 @@ codex, quota, tauri, react, rust, desktop-app, windows, macos, productivity
 
 ## How It Works
 
-Quota Float reads the existing Codex Desktop login state on your machine and queries Codex/ChatGPT quota endpoints with that session. It does not estimate usage from local token counts and does not redeem reset credits or modify account settings.
+Codex Halo reads the existing Codex Desktop login state on your machine and queries Codex/ChatGPT quota endpoints with that session. The existing authentication reader, endpoint parser, and privacy boundary remain in the Rust desktop process. The UI receives normalized snapshots only; it does not estimate usage from local token counts, redeem reset credits, or modify account settings.
 
-Browser preview uses mock data. Real quota reading requires the Tauri desktop app and an existing Codex Desktop login on the same machine.
+The production web entry never substitutes mock quota. A development-only `?designer` route contains explicit visual fixtures for component work. Real quota reading requires the Tauri desktop app and an existing Codex Desktop login on the same machine.
 
 ## Download
 
 For normal users, download the latest unsigned build from GitHub Releases:
 
-- Latest release: https://github.com/change-42-yhmm/quota-float/releases/latest
-- Windows: `quota-float-windows-unsigned.zip`
-- macOS Universal: `quota-float-macos-universal-unsigned.zip`
+- Latest release: https://github.com/xhzwjc/Codex-Halo/releases/latest
+- Windows: `codex-halo-windows-unsigned.zip`
+- macOS Universal: `codex-halo-macos-universal-unsigned.zip`
 
 Unzip it and run the app. Unsigned builds may trigger Windows SmartScreen or macOS Gatekeeper warnings. Public distribution to non-technical users should use signed Windows builds and notarized macOS builds.
 
@@ -54,11 +48,11 @@ Unzip it and run the app. Unsigned builds may trigger Windows SmartScreen or mac
 
 Please use GitHub Issues for bugs, compatibility reports, and feature requests:
 
-https://github.com/change-42-yhmm/quota-float/issues
+https://github.com/xhzwjc/Codex-Halo/issues
 
 ## Privacy Boundary
 
-Quota Float is local-first and intentionally narrow:
+Codex Halo is local-first and intentionally narrow:
 
 - Reads the local Codex Desktop login state only to query Codex quota.
 - Sends the existing Codex access token only to ChatGPT quota endpoints.
@@ -98,14 +92,14 @@ npm run tauri build
 On Windows, Tauri may download WiX to create an MSI installer. If WiX download fails, the release executable may still be produced at:
 
 ```text
-src-tauri/target/release/quota-float.exe
+src-tauri/target/release/codex-halo.exe
 ```
 
 ## Release
 
 GitHub Actions are configured for:
 
-- CI on push/PR: frontend tests, Rust tests, web build, Tauri build.
+- CI on push/PR: frontend tests, TypeScript/Vite build, dependency audit, Rust tests, and Tauri builds.
 - `v*` tags: unsigned Windows and macOS Universal bundle artifacts and a public GitHub Release.
 
 See [docs/GITHUB-RELEASE-CHECKLIST.md](docs/GITHUB-RELEASE-CHECKLIST.md) before publishing a version for others.

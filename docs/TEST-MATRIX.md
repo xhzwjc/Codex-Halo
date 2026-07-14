@@ -4,19 +4,22 @@
 | --- | --- | --- | --- |
 | 数据 | Codex 正常登录 | 显示真实 5 小时窗口、周窗口与会员类型 | 待 Windows/macOS 桌面环境验证 |
 | 数据 | 未登录或登录过期 | 显示登录提示，不暴露响应或 token | 待 Windows/macOS 桌面环境验证 |
-| 数据 | 401/403/429/断网 | 安全错误文案、保留旧数据并退避 | 快照合并单元测试通过，待桌面集成验证 |
+| 数据 | 401/403 | 显示登录失效且不继续展示旧额度 | signed-out 合并单元测试通过，待桌面集成验证 |
+| 数据 | 429/断网/认证文件瞬时不可读 | 安全错误文案、保留旧数据并退避 | stale 与认证错误分类单元测试通过，待桌面集成验证 |
 | 数据 | 变形或缺字段响应 | 不崩溃，不显示虚假额度 | 解析器单元测试覆盖，待集成验证 |
 | 登录态 | Windows `CODEX_HOME` 或用户目录 `.codex/auth.json` | 可以读取本机 Codex 登录态 | 待 Windows 实机验证 |
 | 登录态 | macOS `CODEX_HOME` 或 `~/.codex/auth.json` | 可以读取本机 Codex 登录态 | 待 macOS 实机验证 |
 | 窗口 | 拖动、锁定、鼠标穿透 | 锁定后不拦截编辑器输入，托盘可解锁 | 待 Windows/macOS 验证 |
-| 窗口 | 多显示器、缩放、移除显示器 | 恢复到可见工作区 | 依赖 window-state 插件，待实机验证 |
+| 窗口 | 多显示器、缩放、负坐标、移除显示器 | 悬浮窗和面板保持在当前显示器可用工作区，避开菜单栏、刘海与任务栏 | 几何单元测试通过，待实机验证 |
 | 托盘 | Windows 托盘菜单 | 显示/隐藏、刷新、解锁、固定、语言切换、开机启动、退出可用 | 待 Windows 实机验证 |
-| 菜单栏 | macOS 菜单栏托盘 | 显示/隐藏、刷新、解锁、固定、语言切换、开机启动、退出可用 | 待 macOS 实机验证 |
+| 菜单栏 | macOS 菜单栏文本与面板 | 动态显示 `5h / W`，点击打开面板，显示/隐藏、刷新、解锁、固定、语言切换、开机启动、退出可用 | 摘要/定位单元测试通过，待 macOS 实机验证 |
+| 同步 | 菜单栏、详情面板、悬浮窗 | 单次刷新后同时更新且 revision 不回退，无重复轮询或并发请求 | 前端竞态测试与 Rust 刷新锁审查通过 |
+| 刷新 | 正常、重置边界、连续失败、手动连点 | 5 分钟/1 分钟/有界退避节奏正确，手动刷新防抖并串行 | Rust 单元测试通过，待长时间实机观察 |
 | 视觉 | 悬浮球和展开卡片 | Windows/macOS 使用同一 CSS 参数，尺寸、透明度、圆角、文字布局保持一致 | 待双平台截图验收 |
-| 生命周期 | 单实例、关闭隐藏、休眠恢复 | 无重复后台进程，窗口可恢复 | 待实机验证 |
+| 生命周期 | 单实例、关闭隐藏、休眠恢复 | 无重复菜单栏图标或后台进程，关闭窗口不退出，窗口可恢复 | 静态审查通过，待实机验证 |
 | 性能 | 空闲 CPU/内存 | 无持续高 CPU，记录平台基线 | 待安装包验证 |
-| 构建 | Windows unsigned 包 | 生成 `quota-float-windows-unsigned.zip` | CI/Release 验证 |
-| 构建 | macOS Universal unsigned 包 | 生成 `quota-float-macos-universal-unsigned.zip`，支持 Apple Silicon 和 Intel | CI/Release 验证 |
+| 构建 | Windows unsigned 包 | 生成 `codex-halo-windows-unsigned.zip` | CI/Release 验证 |
+| 构建 | macOS Universal unsigned 包 | 生成 `codex-halo-macos-universal-unsigned.zip`，支持 Apple Silicon 和 Intel | CI/Release 验证 |
 | 隐私 | 日志与配置扫描 | 无 token、账号 ID、原始响应 | 静态审查通过，待安装包扫描 |
 
 ## 发布门槛

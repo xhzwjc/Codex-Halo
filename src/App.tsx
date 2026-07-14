@@ -1,145 +1,234 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { QuotaCard, QuotaOrb } from "./components/QuotaCard";
-import { fetchSnapshots, getPreferences, listenDesktopEvents, setAlwaysOnTop, setWidgetExpanded, startDragging, updatePreferences } from "./lib/bridge";
-import { needsFastRefresh } from "./lib/format";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FloatingWidget } from "./components/FloatingWidget";
+import { MenuPanel } from "./components/MenuPanel";
+import {
+  defaultPreferences,
+  getAppState,
+  getDesktopView,
+  listenDesktopEvents,
+  quitApp,
+  refreshSnapshots,
+  setAlwaysOnTop,
+  setAutostart,
+  setClickThrough,
+  setLanguage,
+  setWidgetVisible,
+} from "./lib/bridge";
 import { copy, nextLanguage, normalizeLanguage } from "./lib/i18n";
-import { mergeSnapshots } from "./lib/snapshots";
-import type { ProviderSnapshot, WidgetPreferences } from "./types";
+import { emptySnapshot, mergeSnapshots } from "./lib/snapshots";
+import type { DesktopState, DesktopView, SnapshotState, WidgetPreferences } from "./types";
 
-const DEFAULT_PREFS: WidgetPreferences = { locked: false, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
+const INITIAL_STATE: DesktopState = {
+  snapshots: [],
+  preferences: defaultPreferences,
+  widgetVisible: true,
+  autostartEnabled: false,
+  refreshing: false,
+  revision: 0,
+  lastAttemptAt: null,
+  lastSuccessAt: null,
+  nextRefreshAt: null,
+};
 
 export default function App() {
-  const [snapshots, setSnapshots] = useState<ProviderSnapshot[]>([]);
-  const [preferences, setPreferences] = useState(DEFAULT_PREFS);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [hovered, setHovered] = useState(false);
-  const [compact, setCompact] = useState(() => window.innerWidth <= 120 || window.innerHeight <= 120);
-  const [consumingProviders, setConsumingProviders] = useState<Set<string>>(() => new Set());
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const failures = useRef(0);
-  const previousPrimary = useRef(new Map<string, number>());
-  const consumptionTimers = useRef(new Map<string, number>());
-  const language = normalizeLanguage(preferences.language);
+  const [desktopState, setDesktopState] = useState<DesktopState>(INITIAL_STATE);
+  const [view, setView] = useState<DesktopView>(() => new URLSearchParams(window.location.search).get("view") === "panel" ? "panel" : "widget");
+  const [initialized, setInitialized] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const language = normalizeLanguage(desktopState.preferences.language);
   const t = copy[language];
 
-  const refresh = useCallback(async (force = false) => {
-    try {
-      const values = await fetchSnapshots(force);
-      const hasFailure = values.some((item) => item.status !== "ok");
-      if (hasFailure) failures.current += 1;
-      else failures.current = 0;
-      for (const item of values) {
-        const nextPrimary = item.shortWindow?.remainingPercent;
-        const previous = previousPrimary.current.get(item.provider);
-        if (nextPrimary !== undefined && previous !== undefined && nextPrimary < previous) {
-          setConsumingProviders((current) => new Set(current).add(item.provider));
-          const oldTimer = consumptionTimers.current.get(item.provider);
-          if (oldTimer !== undefined) window.clearTimeout(oldTimer);
-          const timer = window.setTimeout(() => {
-            setConsumingProviders((current) => { const next = new Set(current); next.delete(item.provider); return next; });
-            consumptionTimers.current.delete(item.provider);
-          }, 5 * 60_000);
-          consumptionTimers.current.set(item.provider, timer);
-        }
-        if (nextPrimary !== undefined) previousPrimary.current.set(item.provider, nextPrimary);
-      }
-      setSnapshots((current) => mergeSnapshots(current, values));
-    } catch {
-      failures.current += 1;
-      setSnapshots((current) => current.length > 0
-        ? current.map((item) => ({ ...item, status: "stale", message: "Refresh failed. Please try again later." }))
-        : [{ provider: "codex", displayName: "CODEX", plan: null, shortWindow: null, weeklyWindow: null, resetCredits: null, resetCreditExpiresAt: [], updatedAt: new Date().toISOString(), status: "unavailable", message: "Quota is temporarily unavailable. It will retry automatically." }]);
-    }
+  const applySnapshotState = useCallback((incoming: SnapshotState) => {
+    setDesktopState((current) => {
+      if (incoming.revision > 0 && incoming.revision < current.revision) return current;
+      return {
+        ...current,
+        snapshots: mergeSnapshots(current.snapshots, incoming.snapshots),
+        refreshing: incoming.refreshing,
+        revision: Math.max(current.revision, incoming.revision),
+        lastAttemptAt: incoming.lastAttemptAt,
+        lastSuccessAt: incoming.lastSuccessAt,
+        nextRefreshAt: incoming.nextRefreshAt,
+      };
+    });
   }, []);
 
   useEffect(() => {
-    void refresh(true);
-    void getPreferences().then((value) => setPreferences({ ...DEFAULT_PREFS, ...value, language: normalizeLanguage(value.language) })).catch(() => setOperationError("Unable to read settings. Defaults are in use."));
-    return () => { for (const timer of consumptionTimers.current.values()) window.clearTimeout(timer); consumptionTimers.current.clear(); };
-  }, [refresh]);
+    void getDesktopView().then(setView).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
-    const updateCompact = () => setCompact(window.innerWidth <= 120 || window.innerHeight <= 120);
-    updateCompact();
-    window.addEventListener("resize", updateCompact);
-    return () => window.removeEventListener("resize", updateCompact);
-  }, []);
+    document.documentElement.dataset.view = view;
+    return () => { delete document.documentElement.dataset.view; };
+  }, [view]);
 
   useEffect(() => {
     let cancelled = false;
-    let cleanup: () => void = () => {};
-    void listenDesktopEvents({ onPreferences: (value) => setPreferences({ ...DEFAULT_PREFS, ...value, language: normalizeLanguage(value.language) }), onRefresh: () => void refresh(true) }).then((value) => {
-      if (cancelled) value(); else cleanup = value;
-    }).catch(() => setOperationError("Desktop event listener failed to start."));
-    return () => { cancelled = true; cleanup(); };
-  }, [refresh]);
-
-  const refreshMs = useMemo(() => {
-    const backoff = failures.current === 0 ? 5 * 60_000 : Math.min(30 * 60_000, 30_000 * 2 ** (failures.current - 1));
-    if (failures.current === 0 && snapshots.some((item) => item.status === "ok" && needsFastRefresh(item))) return 60_000;
-    return backoff;
-  }, [snapshots]);
-
-  useEffect(() => {
-    const id = window.setInterval(() => void refresh(), refreshMs);
-    return () => window.clearInterval(id);
-  }, [refresh, refreshMs]);
-
-  useEffect(() => {
-    const refreshWhenActive = () => { if (document.visibilityState === "visible") void refresh(true); };
-    window.addEventListener("focus", refreshWhenActive);
-    document.addEventListener("visibilitychange", refreshWhenActive);
-    return () => {
-      window.removeEventListener("focus", refreshWhenActive);
-      document.removeEventListener("visibilitychange", refreshWhenActive);
+    let cleanup: () => void = () => undefined;
+    const observed = {
+      snapshots: false,
+      preferences: false,
+      widgetVisibility: false,
+      autostart: false,
     };
-  }, [refresh]);
 
-  useEffect(() => {
-    if (hovered || preferences.pinnedProvider || snapshots.length < 2) return;
-    const id = window.setInterval(() => setActiveIndex((value) => (value + 1) % snapshots.length), preferences.autoRotateSeconds * 1000);
-    return () => window.clearInterval(id);
-  }, [hovered, preferences.autoRotateSeconds, preferences.pinnedProvider, snapshots.length]);
+    void (async () => {
+      try {
+        const unlisten = await listenDesktopEvents({
+          onSnapshots: (value) => {
+            observed.snapshots = true;
+            applySnapshotState(value);
+          },
+          onPreferences: (preferences) => {
+            observed.preferences = true;
+            setDesktopState((current) => ({ ...current, preferences }));
+          },
+          onWidgetVisibility: (widgetVisible) => {
+            observed.widgetVisibility = true;
+            setDesktopState((current) => ({ ...current, widgetVisible }));
+          },
+          onAutostart: (autostartEnabled) => {
+            observed.autostart = true;
+            setDesktopState((current) => ({ ...current, autostartEnabled }));
+          },
+        });
+        if (cancelled) unlisten(); else cleanup = unlisten;
+      } catch {
+        if (!cancelled) setNotice(t.settingsActionFailed);
+      }
 
-  const current = preferences.pinnedProvider
-    ? snapshots.find((item) => item.provider === preferences.pinnedProvider) ?? snapshots[0]
-    : snapshots[activeIndex % Math.max(1, snapshots.length)];
+      try {
+        const value = await getAppState();
+        if (cancelled) return;
+        setDesktopState((current) => {
+          const keepObservedSnapshotState = observed.snapshots
+            || (value.revision > 0 && value.revision < current.revision);
+          return {
+            ...value,
+            snapshots: keepObservedSnapshotState
+              ? current.snapshots
+              : mergeSnapshots(current.snapshots, value.snapshots),
+            preferences: observed.preferences ? current.preferences : value.preferences,
+            widgetVisible: observed.widgetVisibility ? current.widgetVisible : value.widgetVisible,
+            autostartEnabled: observed.autostart ? current.autostartEnabled : value.autostartEnabled,
+            refreshing: keepObservedSnapshotState ? current.refreshing : value.refreshing,
+            revision: Math.max(current.revision, value.revision),
+            lastAttemptAt: keepObservedSnapshotState ? current.lastAttemptAt : value.lastAttemptAt,
+            lastSuccessAt: keepObservedSnapshotState ? current.lastSuccessAt : value.lastSuccessAt,
+            nextRefreshAt: keepObservedSnapshotState ? current.nextRefreshAt : value.nextRefreshAt,
+          };
+        });
+      } catch {
+        if (!cancelled) {
+          setDesktopState((current) => ({ ...current, snapshots: [emptySnapshot("unavailable", null)] }));
+        }
+      } finally {
+        if (!cancelled) setInitialized(true);
+      }
+    })();
 
-  const savePreferences = useCallback((next: WidgetPreferences) => {
-    const previous = preferences;
-    setPreferences(next);
-    setOperationError(null);
-    void updatePreferences(next).catch(() => { setPreferences(previous); setOperationError("Settings could not be saved. Previous state restored."); });
-  }, [preferences]);
+    return () => { cancelled = true; cleanup(); };
+  }, [applySnapshotState]);
 
-  const handleHover = useCallback((value: boolean) => {
-    setHovered(value);
-    setCompact(!value);
-    if (value) void refresh(true);
-    void setWidgetExpanded(value).catch(() => setOperationError(value ? "Widget expand failed." : "Widget collapse failed."));
-  }, [refresh]);
+  const handleRefresh = useCallback(async () => {
+    if (desktopState.refreshing || manualRefreshing) return;
+    setManualRefreshing(true);
+    setNotice(null);
+    try {
+      const snapshots = await refreshSnapshots();
+      setDesktopState((current) => ({ ...current, snapshots: mergeSnapshots(current.snapshots, snapshots) }));
+    } catch {
+      setNotice(t.refreshFailed);
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [desktopState.refreshing, manualRefreshing, t.refreshFailed]);
 
-  if (!current) return <div className="loading-card" aria-label={t.loadingQuota}><span /><span /><span /></div>;
+  const runPreferenceAction = useCallback(async (
+    key: string,
+    operation: () => Promise<WidgetPreferences>,
+  ) => {
+    if (pendingAction) return;
+    setPendingAction(key);
+    setNotice(null);
+    try {
+      const preferences = await operation();
+      setDesktopState((current) => ({ ...current, preferences: { ...defaultPreferences, ...preferences } }));
+    } catch {
+      setNotice(t.settingsActionFailed);
+    } finally {
+      setPendingAction(null);
+    }
+  }, [pendingAction, t.settingsActionFailed]);
 
-  if (compact) {
-    return <QuotaOrb snapshot={current} language={language} onDrag={() => startDragging()} onHover={handleHover} />;
+  const handleWidgetVisibility = useCallback(async () => {
+    if (pendingAction) return;
+    setPendingAction("widget");
+    setNotice(null);
+    try {
+      const widgetVisible = await setWidgetVisible(!desktopState.widgetVisible);
+      setDesktopState((current) => ({ ...current, widgetVisible }));
+    } catch {
+      setNotice(t.windowActionFailed);
+    } finally {
+      setPendingAction(null);
+    }
+  }, [desktopState.widgetVisible, pendingAction, t.windowActionFailed]);
+
+  const handleAutostart = useCallback(async () => {
+    if (pendingAction) return;
+    setPendingAction("autostart");
+    setNotice(null);
+    try {
+      const autostartEnabled = await setAutostart(!desktopState.autostartEnabled);
+      setDesktopState((current) => ({ ...current, autostartEnabled }));
+    } catch {
+      setNotice(t.settingsActionFailed);
+    } finally {
+      setPendingAction(null);
+    }
+  }, [desktopState.autostartEnabled, pendingAction, t.settingsActionFailed]);
+
+  const snapshot = useMemo(() => {
+    const selected = desktopState.preferences.pinnedProvider
+      ? desktopState.snapshots.find((item) => item.provider === desktopState.preferences.pinnedProvider)
+      : desktopState.snapshots[0];
+    if (selected) return selected;
+    return emptySnapshot(initialized && !desktopState.refreshing ? "unavailable" : "loading", null);
+  }, [desktopState.preferences.pinnedProvider, desktopState.refreshing, desktopState.snapshots, initialized]);
+  const refreshing = desktopState.refreshing || manualRefreshing;
+
+  if (view === "panel") {
+    return (
+      <MenuPanel
+        snapshot={snapshot}
+        preferences={desktopState.preferences}
+        widgetVisible={desktopState.widgetVisible}
+        autostartEnabled={desktopState.autostartEnabled}
+        refreshing={refreshing}
+        pendingAction={pendingAction}
+        notice={notice}
+        onRefresh={() => { void handleRefresh(); }}
+        onToggleWidget={() => { void handleWidgetVisibility(); }}
+        onToggleAlwaysOnTop={() => { void runPreferenceAction("alwaysOnTop", () => setAlwaysOnTop(!desktopState.preferences.alwaysOnTop)); }}
+        onToggleAutostart={() => { void handleAutostart(); }}
+        onToggleLanguage={() => { void runPreferenceAction("language", () => setLanguage(nextLanguage(language))); }}
+        onToggleClickThrough={() => { void runPreferenceAction("clickThrough", () => setClickThrough(!desktopState.preferences.locked)); }}
+        onQuit={() => { void quitApp().catch(() => setNotice(t.windowActionFailed)); }}
+      />
+    );
   }
 
   return (
-    <QuotaCard
-      snapshot={current}
-      preferences={preferences}
-      providerCount={snapshots.length}
-      onPrevious={() => setActiveIndex((value) => (value - 1 + snapshots.length) % snapshots.length)}
-      onNext={() => setActiveIndex((value) => (value + 1) % snapshots.length)}
-      onTogglePin={() => savePreferences({ ...preferences, pinnedProvider: preferences.pinnedProvider ? null : current.provider })}
-      onLanguage={() => savePreferences({ ...preferences, language: nextLanguage(language) })}
-      onLock={() => { setOperationError(null); void setAlwaysOnTop(!preferences.alwaysOnTop).then((value) => setPreferences({ ...DEFAULT_PREFS, ...value, language: normalizeLanguage(value.language) })).catch(() => setOperationError("Always-on-top toggle failed.")); }}
-      onDrag={() => startDragging()}
-      onHover={handleHover}
-      onRefresh={() => refresh(true)}
-      isConsuming={consumingProviders.has(current.provider)}
-      notice={operationError}
+    <FloatingWidget
+      snapshot={snapshot}
+      preferences={desktopState.preferences}
+      refreshing={refreshing}
+      notice={notice}
+      onRefresh={() => { void handleRefresh(); }}
+      onToggleAlwaysOnTop={() => { void runPreferenceAction("alwaysOnTop", () => setAlwaysOnTop(!desktopState.preferences.alwaysOnTop)); }}
     />
   );
 }

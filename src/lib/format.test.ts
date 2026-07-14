@@ -1,11 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { clampPercent, formatResetDate, formatResetTime, needsFastRefresh, quotaTier } from "./format";
+import type { ProviderSnapshot } from "../types";
+import { clampPercent, formatResetDate, formatResetTime, formatUpdatedTime, isStaleExpired, normalizePercent, overallQuotaTier, quotaTier } from "./format";
+
+const snapshot: ProviderSnapshot = {
+  provider: "codex",
+  displayName: "CODEX",
+  plan: "PRO",
+  shortWindow: { remainingPercent: 80, resetsAt: null, windowSeconds: 18_000 },
+  weeklyWindow: { remainingPercent: 8, resetsAt: null, windowSeconds: 604_800 },
+  resetCredits: 0,
+  updatedAt: "2026-07-07T00:00:00Z",
+  status: "ok",
+  message: null,
+};
 
 describe("quota formatting", () => {
   it("clamps untrusted percentages", () => {
     expect(clampPercent(-5)).toBe(0);
     expect(clampPercent(51.6)).toBe(52);
     expect(clampPercent(140)).toBe(100);
+    expect(normalizePercent(Number.NaN)).toBeNull();
+    expect(normalizePercent(undefined)).toBeNull();
+  });
+
+  it("uses the tighter of the 5-hour and weekly windows", () => {
+    expect(overallQuotaTier(snapshot)).toBe("critical");
+    expect(overallQuotaTier({ ...snapshot, weeklyWindow: null })).toBe("healthy");
+    expect(overallQuotaTier({ ...snapshot, shortWindow: null, weeklyWindow: null })).toBe("unknown");
+  });
+
+  it("expires stale values after thirty minutes and rejects invalid timestamps", () => {
+    const now = new Date("2026-07-07T00:31:00Z");
+    expect(isStaleExpired({ ...snapshot, status: "stale" }, now)).toBe(true);
+    expect(isStaleExpired({ ...snapshot, status: "stale", updatedAt: "invalid" }, now)).toBe(true);
+    expect(isStaleExpired({ ...snapshot, status: "ok" }, now)).toBe(false);
+  });
+
+  it("formats update age without inventing a timestamp", () => {
+    const now = new Date("2026-07-07T01:10:00Z");
+    expect(formatUpdatedTime("2026-07-07T01:09:30Z", now)).toBe("刚刚");
+    expect(formatUpdatedTime("2026-07-07T01:00:00Z", now, "en")).toBe("10m ago");
+    expect(formatUpdatedTime(null, now)).toBe("日期未知");
   });
 
   it("uses inclusive 50% and 10% quota boundaries", () => {
@@ -27,14 +62,6 @@ describe("quota formatting", () => {
     expect(formatResetTime("invalid", now)).toBe("重置时间未知");
     expect(formatResetTime("invalid", now, "zh-CN")).toBe("重置时间未知");
     expect(formatResetTime("invalid", now, "en")).toBe("Reset time unknown");
-  });
-
-  it("accelerates only near a future reset", () => {
-    const now = new Date("2026-07-07T00:00:00Z");
-    const snapshot = { provider: "codex", displayName: "CODEX", plan: "PRO", weeklyWindow: null, resetCredits: 0, updatedAt: now.toISOString(), status: "ok", message: null } as const;
-    expect(needsFastRefresh({ ...snapshot, shortWindow: { remainingPercent: 1, resetsAt: "2026-07-07T00:10:00Z", windowSeconds: 18000 } }, now)).toBe(true);
-    expect(needsFastRefresh({ ...snapshot, shortWindow: { remainingPercent: 1, resetsAt: "2026-07-07T01:00:00Z", windowSeconds: 18000 } }, now)).toBe(false);
-    expect(needsFastRefresh({ ...snapshot, shortWindow: { remainingPercent: 1, resetsAt: "2026-07-06T23:58:00Z", windowSeconds: 18000 } }, now)).toBe(true);
   });
 
   it("formats the weekly reset as a compact date", () => {

@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for the floating widget",
-  "windows": ["widget"],
+  "description": "Capabilities for the Codex Halo widget and quota panel",
+  "windows": ["widget", "panel"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
