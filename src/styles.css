@@ -115,6 +115,7 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
 .quota-metrics { position: relative; margin-top: 9px; }
 .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .metric-tile { min-width: 0; padding: 12px 11px 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised); }
+.metric-tile:only-child { grid-column: 1 / -1; }
 .metric-tile > p { margin: 0; color: var(--text-secondary); font-size: 10px; font-weight: 640; letter-spacing: .02em; }
 .metric-tile > strong { display: block; margin-top: 7px; color: var(--text); font-size: 29px; font-weight: 620; line-height: 1; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
 .metric-tile > strong small { margin-left: 2px; font-size: 13px; font-weight: 620; letter-spacing: 0; }

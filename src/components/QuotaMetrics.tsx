@@ -35,7 +35,7 @@ function backendMessage(message: string | null, language: Language): string | nu
   if (normalized.includes("sign in") || normalized.includes("login")) return "Codex 登录状态不可用，请重新登录。";
   if (normalized.includes("rate limit")) return "请求过于频繁，应用将稍后重试。";
   if (normalized.includes("network")) return "当前网络不可用，应用将自动重试。";
-  if (normalized.includes("missing the 5h")) return "额度响应暂未包含 5 小时窗口。";
+  if (normalized.includes("supported usage window")) return "额度响应未包含可识别的额度窗口，已停止展示不可靠数据。";
   if (normalized.includes("already running")) return "额度正在刷新，请稍候。";
   return message;
 }
@@ -131,7 +131,7 @@ export const QuotaMetrics = memo(function QuotaMetrics({
     );
   }
 
-  const partial = short === null || weekly === null || snapshot.status === "unavailable";
+  const partial = snapshot.status === "unavailable";
   return (
     <section className={`quota-metrics quota-metrics--${tier}${compact ? " quota-metrics--compact" : ""}`} aria-live="polite" aria-busy={refreshing}>
       {snapshot.status === "stale" || partial ? (
@@ -142,18 +142,22 @@ export const QuotaMetrics = memo(function QuotaMetrics({
         </div>
       ) : null}
       <div className="metric-grid">
-        <MetricTile
-          label={t.fiveHour}
-          percent={short}
-          reset={formatResetTime(snapshot.shortWindow?.resetsAt ?? null, new Date(), activeLanguage)}
-          unavailableLabel={t.temporarilyUnavailable}
-        />
-        <MetricTile
-          label={t.weeklyRemaining}
-          percent={weekly}
-          reset={formatResetTime(snapshot.weeklyWindow?.resetsAt ?? null, new Date(), activeLanguage)}
-          unavailableLabel={t.temporarilyUnavailable}
-        />
+        {short !== null ? (
+          <MetricTile
+            label={t.fiveHour}
+            percent={short}
+            reset={formatResetTime(snapshot.shortWindow?.resetsAt ?? null, new Date(), activeLanguage)}
+            unavailableLabel={t.temporarilyUnavailable}
+          />
+        ) : null}
+        {weekly !== null ? (
+          <MetricTile
+            label={t.weeklyRemaining}
+            percent={weekly}
+            reset={formatResetTime(snapshot.weeklyWindow?.resetsAt ?? null, new Date(), activeLanguage)}
+            unavailableLabel={t.temporarilyUnavailable}
+          />
+        ) : null}
       </div>
       <div className="credit-summary">
         <div>
