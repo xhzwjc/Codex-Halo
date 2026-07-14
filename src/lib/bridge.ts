@@ -192,7 +192,7 @@ export function setWidgetExpanded(expanded: boolean): Promise<void> {
       await invoke("expand_widget", { workArea });
     } catch {
       const { getCurrentWindow, LogicalSize } = await import("@tauri-apps/api/window");
-      await getCurrentWindow().setSize(new LogicalSize(expanded ? 336 : 92, expanded ? 356 : 92));
+      await getCurrentWindow().setSize(new LogicalSize(expanded ? 344 : 100, expanded ? 364 : 100));
     }
   };
   const next = widgetTransition.then(operation, operation);

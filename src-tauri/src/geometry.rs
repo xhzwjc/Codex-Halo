@@ -7,7 +7,7 @@ const COLLAPSED_VISUAL_WIDTH: f64 = 84.0;
 const COLLAPSED_VISUAL_HEIGHT: f64 = 84.0;
 const EXPANDED_VISUAL_WIDTH: f64 = 328.0;
 const EXPANDED_VISUAL_HEIGHT: f64 = 348.0;
-const EDGE_SAFE_INSET_LOGICAL: f64 = 4.0;
+const EDGE_SAFE_INSET_LOGICAL: f64 = 8.0;
 const SNAP_THRESHOLD_LOGICAL: f64 = 24.0;
 const POSITION_EPSILON: u32 = 2;
 
@@ -657,10 +657,10 @@ mod tests {
 
     #[test]
     fn window_sizes_include_the_transparent_safe_inset() {
-        assert_eq!(window_dimension_for_visual_size(84.0, 1.0, 4), 92);
-        assert_eq!(window_dimension_for_visual_size(328.0, 1.0, 4), 336);
-        assert_eq!(window_dimension_for_visual_size(348.0, 1.0, 4), 356);
-        assert_eq!(window_dimension_for_visual_size(328.0, 1.5, 6), 504);
+        assert_eq!(window_dimension_for_visual_size(84.0, 1.0, 8), 100);
+        assert_eq!(window_dimension_for_visual_size(328.0, 1.0, 8), 344);
+        assert_eq!(window_dimension_for_visual_size(348.0, 1.0, 8), 364);
+        assert_eq!(window_dimension_for_visual_size(328.0, 1.5, 12), 516);
     }
 
     #[test]
@@ -669,12 +669,12 @@ mod tests {
             position: PhysicalPosition::new(0, 24),
             size: PhysicalSize::new(1920, 1056),
         };
-        let size = PhysicalSize::new(92, 92);
-        let dock = detect_dock(PhysicalPosition::new(100, 0), size, bounds, 24, 4);
+        let size = PhysicalSize::new(100, 100);
+        let dock = detect_dock(PhysicalPosition::new(100, 0), size, bounds, 24, 8);
         assert!(matches!(dock.vertical, Some(VerticalDock::Top)));
         assert_eq!(
-            snap_position(PhysicalPosition::new(100, 0), size, dock, bounds, 4),
-            PhysicalPosition::new(100, 20)
+            snap_position(PhysicalPosition::new(100, 0), size, dock, bounds, 8),
+            PhysicalPosition::new(100, 16)
         );
     }
 
@@ -684,20 +684,20 @@ mod tests {
             position: PhysicalPosition::new(0, 0),
             size: PhysicalSize::new(1920, 1040),
         };
-        let size = PhysicalSize::new(92, 92);
-        let dock = detect_dock(PhysicalPosition::new(100, 964), size, bounds, 24, 4);
+        let size = PhysicalSize::new(100, 100);
+        let dock = detect_dock(PhysicalPosition::new(100, 964), size, bounds, 24, 8);
         assert!(matches!(dock.vertical, Some(VerticalDock::Bottom)));
         assert_eq!(
-            snap_position(PhysicalPosition::new(100, 964), size, dock, bounds, 4),
-            PhysicalPosition::new(100, 952)
+            snap_position(PhysicalPosition::new(100, 964), size, dock, bounds, 8),
+            PhysicalPosition::new(100, 948)
         );
     }
 
     #[test]
     fn expansion_stays_above_a_bottom_taskbar() {
         let position = expanded_position_in_bounds(
-            rect(1824, 964, 92, 92),
-            PhysicalSize::new(336, 356),
+            rect(1824, 964, 100, 100),
+            PhysicalSize::new(344, 364),
             DockState {
                 horizontal: Some(HorizontalDock::Right),
                 vertical: Some(VerticalDock::Bottom),
@@ -706,16 +706,16 @@ mod tests {
                 position: PhysicalPosition::new(0, 0),
                 size: PhysicalSize::new(1920, 1040),
             },
-            4,
+            8,
         );
-        assert_eq!(position, PhysicalPosition::new(1580, 688));
+        assert_eq!(position, PhysicalPosition::new(1580, 684));
     }
 
     #[test]
     fn expansion_handles_negative_origin_work_areas() {
         let position = expanded_position_in_bounds(
-            rect(-1284, -4, 92, 92),
-            PhysicalSize::new(336, 356),
+            rect(-1288, -8, 100, 100),
+            PhysicalSize::new(344, 364),
             DockState {
                 horizontal: Some(HorizontalDock::Left),
                 vertical: Some(VerticalDock::Top),
@@ -724,22 +724,22 @@ mod tests {
                 position: PhysicalPosition::new(-1280, 0),
                 size: PhysicalSize::new(1280, 984),
             },
-            4,
+            8,
         );
-        assert_eq!(position, PhysicalPosition::new(-1284, -4));
+        assert_eq!(position, PhysicalPosition::new(-1288, -8));
     }
 
     #[test]
     fn undocked_expansion_flips_inward_near_work_area_edges() {
         let position = expanded_position_in_bounds(
-            rect(1750, 900, 92, 92),
-            PhysicalSize::new(336, 356),
+            rect(1750, 900, 100, 100),
+            PhysicalSize::new(344, 364),
             DockState::default(),
             PhysicalRect {
                 position: PhysicalPosition::new(0, 0),
                 size: PhysicalSize::new(1920, 1040),
             },
-            4,
+            8,
         );
         assert_eq!(position, PhysicalPosition::new(1506, 636));
     }
@@ -750,7 +750,7 @@ mod tests {
             position: PhysicalPosition::new(-1280, 0),
             size: PhysicalSize::new(1280, 984),
         };
-        assert!(intersects_visible_area(rect(-40, 400, 92, 92), bounds));
-        assert!(!intersects_visible_area(rect(40, 400, 92, 92), bounds));
+        assert!(intersects_visible_area(rect(-40, 400, 100, 100), bounds));
+        assert!(!intersects_visible_area(rect(40, 400, 100, 100), bounds));
     }
 }

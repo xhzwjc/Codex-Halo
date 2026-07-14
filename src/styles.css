@@ -1,7 +1,7 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", sans-serif;
   color: #202328;
-  background: transparent;
+  background-color: transparent;
   font-synthesis: none;
   --surface: rgba(248, 249, 250, .98);
   --surface-raised: #fff;
@@ -15,11 +15,19 @@
   --healthy: #39745e;
   --caution: #9b6c22;
   --critical: #b75043;
-  --safe-inset: 4px;
+  --widget-safe-inset: 8px;
+  --panel-safe-inset: 8px;
 }
 
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background-color: transparent !important;
+  background-image: none !important;
+}
 body { color: var(--text); }
 button { color: inherit; font: inherit; }
 button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offset: 2px; }
@@ -28,16 +36,16 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
 
 .quota-card {
   position: relative;
-  width: calc(100% - var(--safe-inset) * 2);
-  height: calc(100% - var(--safe-inset) * 2);
-  margin: var(--safe-inset);
+  width: calc(100% - var(--widget-safe-inset) * 2);
+  height: calc(100% - var(--widget-safe-inset) * 2);
+  margin: var(--widget-safe-inset);
   overflow: hidden;
   padding: 14px;
   border: 1px solid var(--border-strong);
   border-radius: 22px;
   color: var(--text);
   background: var(--surface);
-  box-shadow: 0 16px 38px rgba(22, 29, 38, .16), 0 2px 8px rgba(22, 29, 38, .08), inset 0 1px 0 rgba(255, 255, 255, .8);
+  box-shadow: 0 2px 6px -4px rgba(22, 29, 38, .28), 0 1px 2px -1px rgba(22, 29, 38, .12), inset 0 1px 0 rgba(255, 255, 255, .8);
   user-select: none;
 }
 
@@ -163,9 +171,9 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
 
 .quota-orb {
   position: relative;
-  width: calc(100% - var(--safe-inset) * 2);
-  height: calc(100% - var(--safe-inset) * 2);
-  margin: var(--safe-inset);
+  width: calc(100% - var(--widget-safe-inset) * 2);
+  height: calc(100% - var(--widget-safe-inset) * 2);
+  margin: var(--widget-safe-inset);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -173,12 +181,12 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
   border-radius: 24px;
   color: var(--text);
   background: var(--surface);
-  box-shadow: 0 9px 24px rgba(22, 29, 38, .15), 0 2px 7px rgba(22, 29, 38, .07), inset 0 1px 0 rgba(255, 255, 255, .82);
+  box-shadow: 0 2px 6px -4px rgba(22, 29, 38, .3), 0 1px 2px -1px rgba(22, 29, 38, .13), inset 0 1px 0 rgba(255, 255, 255, .82);
   cursor: move;
   user-select: none;
   transition: transform .16s ease, box-shadow .16s ease;
 }
-.quota-orb:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(22, 29, 38, .18), 0 2px 7px rgba(22, 29, 38, .08); }
+.quota-orb:hover { transform: translateY(-1px); box-shadow: 0 3px 6px -4px rgba(22, 29, 38, .32), 0 1px 2px -1px rgba(22, 29, 38, .14); }
 .orb-ring { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); transform: rotate(-90deg); }
 .orb-ring circle { fill: none; stroke-width: 3; }
 .orb-ring__track { stroke: #e4e7ea; }
@@ -199,16 +207,16 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
 .orb-status--critical, .orb-status--unavailable { background: var(--critical); }
 
 .menu-panel {
-  width: calc(100% - var(--safe-inset) * 2);
-  height: calc(100% - var(--safe-inset) * 2);
-  margin: var(--safe-inset);
+  width: calc(100% - var(--panel-safe-inset) * 2);
+  height: calc(100% - var(--panel-safe-inset) * 2);
+  margin: var(--panel-safe-inset);
   overflow: auto;
   padding: 15px;
   border: 1px solid var(--border-strong);
   border-radius: 20px;
   color: var(--text);
   background: var(--surface);
-  box-shadow: 0 22px 52px rgba(22, 29, 38, .2), 0 3px 10px rgba(22, 29, 38, .1), inset 0 1px 0 rgba(255, 255, 255, .82);
+  box-shadow: 0 2px 6px -4px rgba(22, 29, 38, .3), 0 1px 2px -1px rgba(22, 29, 38, .13), inset 0 1px 0 rgba(255, 255, 255, .82);
 }
 .menu-panel::-webkit-scrollbar { width: 0; height: 0; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -250,10 +258,10 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
 
 .design-workbench { width: 100vw; min-height: 100vh; display: grid; grid-template-columns: minmax(480px, 1fr) 390px; color: var(--text); background: #f1f2f4; overflow: auto; }
 .screenshot-stage { width: 100vw; height: 100vh; display: grid; place-content: center; background: #f1f2f4; overflow: hidden; }
-.screenshot-stage--states { grid-template-columns: repeat(3, 336px); gap: 24px; align-content: center; justify-content: center; }
+.screenshot-stage--states { grid-template-columns: repeat(3, 344px); gap: 24px; align-content: center; justify-content: center; }
 .design-stage { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 18px; padding: 60px; background: #eceef1; }
-.design-card-frame { width: 336px; height: 356px; }
-.design-orb-frame { width: 92px; height: 92px; }
+.design-card-frame { width: 344px; height: 364px; }
+.design-orb-frame { width: 100px; height: 100px; }
 .design-preview-switch { max-width: 560px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 5px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .design-preview-switch button { min-height: 32px; padding: 0 11px; border: 0; border-radius: 8px; color: var(--text-secondary); background: transparent; cursor: pointer; font-size: 11px; }
 .design-preview-switch button.is-active { color: #fff; background: var(--accent); }
