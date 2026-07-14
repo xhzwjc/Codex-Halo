@@ -1,10 +1,12 @@
 import {
   ArrowClockwise,
+  ClockCountdown,
   ClockCounterClockwise,
   CloudSlash,
   SignIn,
   SpinnerGap,
   WarningCircle,
+  X,
 } from "@phosphor-icons/react";
 import { memo, useMemo, useState } from "react";
 import {
@@ -14,6 +16,8 @@ import {
   isStaleExpired,
   normalizePercent,
   overallQuotaTier,
+  resetCreditExpiryState,
+  type ResetCreditExpiryState,
 } from "../lib/format";
 import { copy, normalizeLanguage } from "../lib/i18n";
 import type { Language, ProviderSnapshot, SnapshotStatus } from "../types";
@@ -24,6 +28,11 @@ interface QuotaMetricsProps {
   refreshing?: boolean;
   compact?: boolean;
   onRefresh?: () => void;
+}
+
+interface ResetCreditItem {
+  value: string | null;
+  state: ResetCreditExpiryState;
 }
 
 function backendMessage(message: string | null, language: Language): string | null {
@@ -95,10 +104,32 @@ export const QuotaMetrics = memo(function QuotaMetrics({
   const canShowValues = snapshot.status !== "signed_out" && !expired && hasValues;
   const tier = overallQuotaTier(snapshot);
   const message = backendMessage(snapshot.message, activeLanguage);
-  const creditExpirations = useMemo(
-    () => (snapshot.resetCreditExpiresAt ?? []).map((value, index) => t.creditItem(index, formatDateTime(value, activeLanguage))),
-    [activeLanguage, snapshot.resetCreditExpiresAt, t],
-  );
+  const creditItems = useMemo<ResetCreditItem[]>(() => {
+    const count = snapshot.resetCredits === null ? 0 : Math.min(50, Math.max(0, Math.floor(snapshot.resetCredits)));
+    if (count === 0) return [];
+    const now = new Date();
+    const items: ResetCreditItem[] = (snapshot.resetCreditExpiresAt ?? [])
+      .map((value) => ({ value, state: resetCreditExpiryState(value, now) }))
+      .sort((left, right) => (left.state.expiresAt ?? Number.POSITIVE_INFINITY) - (right.state.expiresAt ?? Number.POSITIVE_INFINITY))
+      .slice(0, count);
+    while (items.length < count) {
+      items.push({ value: null, state: resetCreditExpiryState(null, now) });
+    }
+    return items;
+  }, [snapshot.resetCreditExpiresAt, snapshot.resetCredits]);
+
+  const expiryLabel = (state: ResetCreditExpiryState): string => {
+    if (state.urgency === "expired") return t.creditExpired;
+    if (state.daysRemaining === null) return t.creditExpiresUnknown;
+    return t.creditCountdown(state.daysRemaining);
+  };
+  const earliestCredit = creditItems[0] ?? null;
+  const creditHint = earliestCredit?.value && earliestCredit.state.expiresAt !== null
+    ? `${t.creditEarliestExpiry(formatDateTime(earliestCredit.value, activeLanguage))} · ${expiryLabel(earliestCredit.state)}`
+    : snapshot.resetCredits !== null && snapshot.resetCredits > 0
+      ? t.noCreditExpiration
+      : null;
+  const creditUrgency = earliestCredit?.state.urgency ?? "unknown";
 
   if (!canShowValues) {
     const isLoading = snapshot.status === "loading";
@@ -159,8 +190,9 @@ export const QuotaMetrics = memo(function QuotaMetrics({
           />
         ) : null}
       </div>
-      <div className="credit-summary">
-        <div>
+      <div className={`credit-summary credit-summary--${creditUrgency}`}>
+        <div className="credit-summary__icon" aria-hidden="true"><ClockCountdown /></div>
+        <div className="credit-summary__copy">
           <span>{t.resetCreditsTitle}</span>
           <strong>
             {snapshot.resetCredits === null
@@ -169,16 +201,37 @@ export const QuotaMetrics = memo(function QuotaMetrics({
                 ? t.noResetCredits
                 : t.resetCredits(snapshot.resetCredits)}
           </strong>
+          {creditHint ? <small title={creditHint}>{creditHint}</small> : null}
         </div>
         {snapshot.resetCredits !== null && snapshot.resetCredits > 0 ? (
-          <button type="button" className="text-button" onClick={() => setShowCredits((value) => !value)} aria-expanded={showCredits}>{t.view}</button>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setShowCredits((value) => !value)}
+            aria-expanded={showCredits}
+            aria-controls="credit-expiry-details"
+          >
+            {showCredits ? t.hide : t.view}
+          </button>
         ) : null}
       </div>
-      {showCredits ? (
-        <div className="credit-popover" role="status">
-          {creditExpirations.length > 0
-            ? creditExpirations.map((item) => <p key={item}>{item}</p>)
-            : <p>{t.noCreditExpiration}</p>}
+      {showCredits && snapshot.resetCredits !== null && snapshot.resetCredits > 0 ? (
+        <div id="credit-expiry-details" className="credit-popover" role="dialog" aria-label={t.creditExpiryDetails}>
+          <header className="credit-popover__header">
+            <strong>{t.creditExpiryDetails}</strong>
+            <button type="button" onClick={() => setShowCredits(false)} aria-label={t.hide}><X /></button>
+          </header>
+          <div className="credit-list">
+            {creditItems.map((item, index) => (
+              <div className={`credit-item credit-item--${item.state.urgency}`} key={`${item.value ?? "unknown"}-${index}`}>
+                <div>
+                  <strong>{t.creditName(index)}</strong>
+                  <small>{item.value ? t.creditUseBefore(formatDateTime(item.value, activeLanguage)) : t.creditExpiresUnknown}</small>
+                </div>
+                <span>{expiryLabel(item.state)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </section>

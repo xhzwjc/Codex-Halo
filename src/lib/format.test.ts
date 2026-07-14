@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderSnapshot } from "../types";
-import { clampPercent, formatResetDate, formatResetTime, formatUpdatedTime, isStaleExpired, normalizePercent, overallQuotaTier, quotaTier } from "./format";
+import { clampPercent, formatResetDate, formatResetTime, formatUpdatedTime, isStaleExpired, normalizePercent, overallQuotaTier, quotaTier, resetCreditExpiryState } from "./format";
 
 const snapshot: ProviderSnapshot = {
   provider: "codex",
@@ -70,5 +70,15 @@ describe("quota formatting", () => {
     expect(formatResetDate(null)).toBe("日期未知");
     expect(formatResetDate(null, "zh-CN")).toBe("日期未知");
     expect(formatResetDate(null, "en")).toBe("Date unknown");
+  });
+
+  it("classifies reset-credit expiration at the 3, 2, and 1 day boundaries", () => {
+    const now = new Date("2026-07-14T12:00:00Z");
+    expect(resetCreditExpiryState("2026-07-18T12:00:00Z", now)).toMatchObject({ urgency: "normal", daysRemaining: 4 });
+    expect(resetCreditExpiryState("2026-07-17T12:00:00Z", now)).toMatchObject({ urgency: "soon", daysRemaining: 3 });
+    expect(resetCreditExpiryState("2026-07-16T12:00:00Z", now)).toMatchObject({ urgency: "warning", daysRemaining: 2 });
+    expect(resetCreditExpiryState("2026-07-15T12:00:00Z", now)).toMatchObject({ urgency: "critical", daysRemaining: 1 });
+    expect(resetCreditExpiryState("2026-07-14T11:59:59Z", now)).toMatchObject({ urgency: "expired", daysRemaining: 0 });
+    expect(resetCreditExpiryState("invalid", now)).toMatchObject({ urgency: "unknown", daysRemaining: null });
   });
 });

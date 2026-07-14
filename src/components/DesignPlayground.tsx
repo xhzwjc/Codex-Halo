@@ -9,7 +9,7 @@ const preview: ProviderSnapshot = {
   shortWindow: { remainingPercent: 74, resetsAt: new Date(Date.now() + 78 * 60_000).toISOString(), windowSeconds: 18_000 },
   weeklyWindow: { remainingPercent: 42, resetsAt: new Date(Date.now() + 3.2 * 86_400_000).toISOString(), windowSeconds: 604_800 },
   resetCredits: 1,
-  resetCreditExpiresAt: [new Date(Date.now() + 9 * 86_400_000).toISOString()],
+  resetCreditExpiresAt: [new Date(Date.now() + 2 * 86_400_000).toISOString()],
   updatedAt: new Date().toISOString(),
   status: "ok",
   message: null,

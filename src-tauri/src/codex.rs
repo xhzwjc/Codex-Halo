@@ -670,4 +670,22 @@ mod tests {
         assert_eq!(short.unwrap().remaining_percent, 81.0);
         assert!(weekly.is_none());
     }
+
+    #[test]
+    fn collects_and_orders_reset_credit_expirations() {
+        let value = serde_json::json!({
+            "available_count": 2,
+            "credits": [
+                {"expires_at": "2026-07-17T12:00:00Z"},
+                {"expiresAt": "2026-07-16T12:00:00Z"}
+            ]
+        });
+        assert_eq!(
+            collect_reset_credit_expirations(&value),
+            vec![
+                "2026-07-16T12:00:00Z".to_string(),
+                "2026-07-17T12:00:00Z".to_string()
+            ]
+        );
+    }
 }
