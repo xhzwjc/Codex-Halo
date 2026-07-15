@@ -13,7 +13,8 @@ describe("desktop bridge boundary", () => {
     await expect(getPreferences()).resolves.toMatchObject({
       locked: false,
       alwaysOnTop: true,
-      language: "zh-CN",
+      quotaRefreshIntervalSeconds: 300,
+      language: "en",
     });
   });
 });

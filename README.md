@@ -8,9 +8,10 @@ Native-feeling desktop quota monitor for the local Codex Desktop login state, wi
 - Displays compact live quota text in the macOS menu bar; Windows falls back to a tray icon, tooltip, and context menu.
 - Uses clear quota states for healthy, caution, and critical remaining usage.
 - Collapses into a small floating orb when idle, then expands on hover.
-- Opens a dedicated quota panel from the menu bar with refresh, widget visibility, always-on-top, click-through, launch-at-login, language, and quit controls.
+- Opens a dedicated quota panel from the menu bar with refresh frequency, manual-only mode, widget visibility, always-on-top, click-through, launch-at-login, language, and quit controls.
+- Uses English on first launch by default, with Simplified Chinese available from the language setting.
 - Keeps the menu bar, detail panel, and floating window synchronized through one Rust-owned state coordinator.
-- Refreshes quota every five minutes when healthy, every minute around reset boundaries, and uses bounded exponential backoff after failures; manual refreshes are serialized and debounced.
+- Refreshes quota every five minutes by default, with presets from 10 seconds to 30 minutes, a validated 10-second-to-24-hour custom interval, or manual-only mode. Reset boundaries can accelerate slower schedules to one minute, while failures use bounded exponential backoff; manual refreshes remain serialized and debounced.
 - Shows reset credit count and available reset-credit expiration times when the quota service provides them.
 - Handles stale data, signed-out sessions, unavailable quota responses, and loading states without fabricating values.
 - Adds an on-demand local usage dashboard with total tokens, peak day, sessions and streaks; the activity heatmap switches between daily, weekly, and cumulative views, while Models provides exact hover values and 7-day, 30-day, and all-time ranges.
@@ -35,7 +36,7 @@ Codex Halo reads the existing Codex Desktop login state on your machine and quer
 
 Usage statistics are built on demand from the timestamp, model, and cumulative token-counter fields already stored in `CODEX_HOME/sessions` and `CODEX_HOME/archived_sessions`. Conversation text and tool output are ignored. The first read creates a local aggregate index; later refreshes only process appended bytes.
 
-The detail-panel refresh action updates quota and the local usage index together so both sections are current after one click. Background scheduling remains quota-only to avoid repeatedly scanning local session files; usage statistics revalidate when opened after 60 seconds or when the user refreshes manually.
+The detail-panel refresh action updates quota and the local usage index together so both sections are current after one click. Configurable background scheduling remains quota-only to avoid repeatedly scanning local session files; usage statistics revalidate when opened after 60 seconds or when the user refreshes manually. Changing the quota interval restarts the timer without issuing an immediate request. Manual-only mode disables periodic network requests after the initial startup read.
 
 The production web entry never substitutes mock quota. A development-only `?designer` route contains explicit visual fixtures for component work. Real quota reading requires the Tauri desktop app and an existing Codex Desktop login on the same machine.
 

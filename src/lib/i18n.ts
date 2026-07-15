@@ -1,6 +1,6 @@
 import type { Language } from "../types";
 
-export const DEFAULT_LANGUAGE: Language = "zh-CN";
+export const DEFAULT_LANGUAGE: Language = "en";
 
 export const copy = {
   "zh-CN": {
@@ -69,6 +69,13 @@ export const copy = {
     quit: "退出 Codex Halo",
     refresh: "刷新",
     refreshAll: "刷新额度与本地使用统计",
+    refreshCustom: "自定义",
+    refreshHighFrequencyWarning: "10 秒刷新会增加接口请求、CPU 与电量消耗；出现错误时仍会自动退避。",
+    refreshIntervalHint: "只影响额度数据；使用统计仍按需读取",
+    refreshIntervalInvalid: "请输入 10 秒到 24 小时之间的时间",
+    refreshIntervalManualHint: "关闭周期请求；首次启动仍会读取一次额度。",
+    refreshIntervalScheduleHint: "保存后从当前时间重新计时，不会立即请求。",
+    refreshIntervalTitle: "自动刷新频率",
     refreshing: "刷新中",
     refreshQuota: "刷新额度数据",
     refreshStats: "刷新本地使用统计",
@@ -86,6 +93,15 @@ export const copy = {
     serviceNext: "下一个服务",
     sessions: "会话数",
     settings: "设置",
+    quotaAutoRefresh: "额度自动刷新",
+    manualRefreshOnly: "仅手动刷新",
+    nextRefreshAt: (time: string) => `下次 ${time}`,
+    recommended: "推荐",
+    save: "保存",
+    cancel: "取消",
+    secondsUnit: "秒",
+    minutesUnit: "分钟",
+    hoursUnit: "小时",
     statsEmpty: "还没有可统计的记录",
     statsEmptyHint: "Codex 产生本地 Token 记录后，这里会自动出现真实数据。",
     statsLoading: "正在建立本地统计",
@@ -207,6 +223,13 @@ export const copy = {
     quit: "Quit Codex Halo",
     refresh: "Refresh",
     refreshAll: "Refresh quota and local usage statistics",
+    refreshCustom: "Custom",
+    refreshHighFrequencyWarning: "A 10-second interval increases requests, CPU use, and battery use. Errors still use automatic backoff.",
+    refreshIntervalHint: "Affects quota data only; usage statistics remain on demand",
+    refreshIntervalInvalid: "Enter a time between 10 seconds and 24 hours",
+    refreshIntervalManualHint: "Stops periodic requests; startup still reads quota once.",
+    refreshIntervalScheduleHint: "Saving restarts the timer from now without an immediate request.",
+    refreshIntervalTitle: "Auto-refresh frequency",
     refreshing: "Refreshing",
     refreshQuota: "Refresh quota data",
     refreshStats: "Refresh local usage statistics",
@@ -224,6 +247,15 @@ export const copy = {
     serviceNext: "Next service",
     sessions: "Sessions",
     settings: "Settings",
+    quotaAutoRefresh: "Quota auto-refresh",
+    manualRefreshOnly: "Manual only",
+    nextRefreshAt: (time: string) => `Next ${time}`,
+    recommended: "Recommended",
+    save: "Save",
+    cancel: "Cancel",
+    secondsUnit: "Seconds",
+    minutesUnit: "Minutes",
+    hoursUnit: "Hours",
     statsEmpty: "No usage to show yet",
     statsEmptyHint: "Real data will appear after Codex records local token usage.",
     statsLoading: "Building local statistics",
@@ -282,7 +314,7 @@ export const copy = {
 } as const;
 
 export function normalizeLanguage(value: unknown): Language {
-  return value === "en" ? "en" : DEFAULT_LANGUAGE;
+  return value === "zh-CN" ? "zh-CN" : DEFAULT_LANGUAGE;
 }
 
 export function nextLanguage(language: Language): Language {

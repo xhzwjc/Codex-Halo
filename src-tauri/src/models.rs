@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS: u64 = 5 * 60;
+pub const MIN_QUOTA_REFRESH_INTERVAL_SECONDS: u64 = 10;
+pub const MAX_QUOTA_REFRESH_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageWindow {
@@ -61,6 +65,8 @@ pub struct WidgetPreferences {
     pub widget_visible: bool,
     pub pinned_provider: Option<String>,
     pub auto_rotate_seconds: u64,
+    #[serde(default = "default_quota_refresh_interval_seconds")]
+    pub quota_refresh_interval_seconds: Option<u64>,
     #[serde(default = "default_language")]
     pub language: String,
 }
@@ -72,7 +78,10 @@ fn default_widget_visible() -> bool {
     true
 }
 fn default_language() -> String {
-    "zh-CN".into()
+    "en".into()
+}
+fn default_quota_refresh_interval_seconds() -> Option<u64> {
+    Some(DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS)
 }
 
 impl Default for WidgetPreferences {
@@ -83,6 +92,7 @@ impl Default for WidgetPreferences {
             widget_visible: true,
             pinned_provider: None,
             auto_rotate_seconds: 12,
+            quota_refresh_interval_seconds: default_quota_refresh_interval_seconds(),
             language: default_language(),
         }
     }
@@ -91,6 +101,12 @@ impl Default for WidgetPreferences {
 impl WidgetPreferences {
     pub fn normalized(mut self) -> Self {
         self.auto_rotate_seconds = self.auto_rotate_seconds.clamp(5, 300);
+        if self.quota_refresh_interval_seconds.is_some_and(|seconds| {
+            !(MIN_QUOTA_REFRESH_INTERVAL_SECONDS..=MAX_QUOTA_REFRESH_INTERVAL_SECONDS)
+                .contains(&seconds)
+        }) {
+            self.quota_refresh_interval_seconds = default_quota_refresh_interval_seconds();
+        }
         if self.pinned_provider.as_deref() != Some("codex") {
             self.pinned_provider = None;
         }
@@ -98,6 +114,54 @@ impl WidgetPreferences {
             self.language = default_language();
         }
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_preferences_default_to_five_minute_quota_refresh() {
+        let preferences: WidgetPreferences = serde_json::from_str(
+            r#"{
+                "locked": false,
+                "alwaysOnTop": true,
+                "widgetVisible": true,
+                "pinnedProvider": null,
+                "autoRotateSeconds": 12
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            preferences.quota_refresh_interval_seconds,
+            Some(DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS)
+        );
+        assert_eq!(preferences.language, "en");
+    }
+
+    #[test]
+    fn invalid_quota_refresh_interval_falls_back_safely() {
+        let preferences = WidgetPreferences {
+            quota_refresh_interval_seconds: Some(9),
+            ..WidgetPreferences::default()
+        }
+        .normalized();
+
+        assert_eq!(
+            preferences.quota_refresh_interval_seconds,
+            Some(DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS)
+        );
+        assert_eq!(
+            WidgetPreferences {
+                quota_refresh_interval_seconds: None,
+                ..WidgetPreferences::default()
+            }
+            .normalized()
+            .quota_refresh_interval_seconds,
+            None
+        );
     }
 }
 

@@ -13,6 +13,7 @@ import {
   setAutostart,
   setClickThrough,
   setLanguage,
+  setQuotaRefreshInterval,
   setWidgetVisible,
 } from "./lib/bridge";
 import { copy, nextLanguage, normalizeLanguage } from "./lib/i18n";
@@ -240,6 +241,7 @@ export default function App() {
         usageLoading={usageLoading}
         usageFailed={usageFailed}
         pendingAction={pendingAction}
+        nextRefreshAt={desktopState.nextRefreshAt}
         notice={notice}
         onRefresh={() => { void handleRefreshAll(); }}
         onLoadUsageStats={() => { void handleUsageStats(false); }}
@@ -247,6 +249,7 @@ export default function App() {
         onToggleAlwaysOnTop={() => { void runPreferenceAction("alwaysOnTop", () => setAlwaysOnTop(!desktopState.preferences.alwaysOnTop)); }}
         onToggleAutostart={() => { void handleAutostart(); }}
         onToggleLanguage={() => { void runPreferenceAction("language", () => setLanguage(nextLanguage(language))); }}
+        onSetRefreshInterval={(seconds) => { void runPreferenceAction("refreshInterval", () => setQuotaRefreshInterval(seconds)); }}
         onToggleClickThrough={() => { void runPreferenceAction("clickThrough", () => setClickThrough(!desktopState.preferences.locked)); }}
         onQuit={() => { void quitApp().catch(() => setNotice(t.windowActionFailed)); }}
       />

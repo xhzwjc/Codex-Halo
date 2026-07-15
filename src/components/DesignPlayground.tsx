@@ -16,7 +16,7 @@ const preview: ProviderSnapshot = {
   status: "ok",
   message: null,
 };
-const preferences: WidgetPreferences = { locked: false, alwaysOnTop: true, pinnedProvider: "codex", autoRotateSeconds: 12, language: "en" };
+const preferences: WidgetPreferences = { locked: false, alwaysOnTop: true, pinnedProvider: "codex", autoRotateSeconds: 12, quotaRefreshIntervalSeconds: 300, language: "en" };
 
 function previewDate(value: Date): string {
   const year = value.getFullYear();

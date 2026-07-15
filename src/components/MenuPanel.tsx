@@ -1,5 +1,6 @@
 import {
   ArrowClockwise,
+  CaretRight,
   CursorClick,
   Eye,
   EyeSlash,
@@ -7,12 +8,14 @@ import {
   PushPin,
   RocketLaunch,
   SpinnerGap,
+  Timer,
   Translate,
+  WarningCircle,
 } from "@phosphor-icons/react";
-import { memo, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import { overallQuotaTier } from "../lib/format";
 import { copy, normalizeLanguage } from "../lib/i18n";
-import type { ProviderSnapshot, UsageStats, WidgetPreferences } from "../types";
+import type { Language, ProviderSnapshot, UsageStats, WidgetPreferences } from "../types";
 import { ProviderMark } from "./ProviderMark";
 import { QuotaMetrics } from "./QuotaMetrics";
 import { UsageStatsPanel } from "./UsageStatsPanel";
@@ -28,6 +31,7 @@ interface MenuPanelProps {
   usageFailed?: boolean;
   initialSection?: "quota" | "stats";
   pendingAction?: string | null;
+  nextRefreshAt?: string | null;
   notice?: ReactNode;
   onRefresh: () => void;
   onLoadUsageStats?: () => void;
@@ -35,8 +39,202 @@ interface MenuPanelProps {
   onToggleAlwaysOnTop: () => void;
   onToggleAutostart: () => void;
   onToggleLanguage: () => void;
+  onSetRefreshInterval?: (seconds: number | null) => void;
   onToggleClickThrough: () => void;
   onQuit: () => void;
+}
+
+type RefreshUnit = "seconds" | "minutes" | "hours";
+
+const REFRESH_PRESETS = [10, 30, 60, 300, 600, 1800] as const;
+const REFRESH_UNIT_SECONDS: Record<RefreshUnit, number> = {
+  seconds: 1,
+  minutes: 60,
+  hours: 3600,
+};
+
+function formatRefreshInterval(seconds: number | null, language: Language): string {
+  if (seconds === null) return copy[language].manualRefreshOnly;
+  const [value, unit] = seconds % 3600 === 0
+    ? [seconds / 3600, language === "en" ? (seconds === 3600 ? "hour" : "hours") : "小时"]
+    : seconds % 60 === 0
+      ? [seconds / 60, language === "en" ? (seconds === 60 ? "minute" : "minutes") : "分钟"]
+      : [seconds, language === "en" ? (seconds === 1 ? "second" : "seconds") : "秒"];
+  return language === "en" ? `Every ${value} ${unit}` : `每 ${value} ${unit}`;
+}
+
+function customIntervalParts(seconds: number | null): { value: string; unit: RefreshUnit } {
+  if (seconds && seconds % 3600 === 0) return { value: String(seconds / 3600), unit: "hours" };
+  if (seconds && seconds % 60 === 0) return { value: String(seconds / 60), unit: "minutes" };
+  if (seconds) return { value: String(seconds), unit: "seconds" };
+  return { value: "5", unit: "minutes" };
+}
+
+function RefreshIntervalSetting({
+  seconds,
+  nextRefreshAt,
+  language,
+  pending,
+  onChange,
+}: {
+  seconds: number | null;
+  nextRefreshAt: string | null;
+  language: Language;
+  pending: boolean;
+  onChange: (seconds: number | null) => void;
+}) {
+  const t = copy[language];
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState<string>(seconds === null ? "manual" : String(seconds));
+  const initialCustom = customIntervalParts(seconds);
+  const [customValue, setCustomValue] = useState(initialCustom.value);
+  const [customUnit, setCustomUnit] = useState<RefreshUnit>(initialCustom.unit);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  const openDialog = () => {
+    const isPreset = seconds !== null && REFRESH_PRESETS.includes(seconds as typeof REFRESH_PRESETS[number]);
+    const custom = customIntervalParts(seconds);
+    setChoice(seconds === null ? "manual" : isPreset ? String(seconds) : "custom");
+    setCustomValue(custom.value);
+    setCustomUnit(custom.unit);
+    setOpen(true);
+  };
+
+  const numericCustomValue = Number(customValue);
+  const customSeconds = Number.isSafeInteger(numericCustomValue) && numericCustomValue > 0
+    ? numericCustomValue * REFRESH_UNIT_SECONDS[customUnit]
+    : Number.NaN;
+  const draftSeconds = choice === "manual"
+    ? null
+    : choice === "custom"
+      ? customSeconds
+      : Number(choice);
+  const valid = draftSeconds === null
+    || (Number.isSafeInteger(draftSeconds) && draftSeconds >= 10 && draftSeconds <= 86_400);
+  const nextDate = nextRefreshAt ? new Date(nextRefreshAt) : null;
+  const nextLabel = nextDate && !Number.isNaN(nextDate.getTime())
+    ? t.nextRefreshAt(new Intl.DateTimeFormat(language, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(nextDate))
+    : null;
+  const intervalLabel = formatRefreshInterval(seconds, language);
+
+  return (
+    <>
+      <button type="button" className="setting-row" onClick={openDialog} disabled={pending}>
+        <span className="setting-row__icon" aria-hidden="true"><Timer /></span>
+        <span className="setting-row__copy">
+          <strong>{t.quotaAutoRefresh}</strong>
+          <small>{seconds === null || !nextLabel ? intervalLabel : `${intervalLabel} · ${nextLabel}`}</small>
+        </span>
+        {pending ? <SpinnerGap className="is-spinning setting-row__pending" /> : <CaretRight className="setting-row__chevron" aria-hidden="true" />}
+      </button>
+
+      {open ? (
+        <div
+          className="refresh-interval-backdrop"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
+        >
+          <form
+            className="refresh-interval-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refresh-interval-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!valid) return;
+              if (draftSeconds !== seconds) onChange(draftSeconds);
+              setOpen(false);
+            }}
+          >
+            <div className="refresh-interval-dialog__heading">
+              <span className="setting-row__icon" aria-hidden="true"><Timer /></span>
+              <div>
+                <strong id="refresh-interval-title">{t.refreshIntervalTitle}</strong>
+                <p>{t.refreshIntervalHint}</p>
+              </div>
+            </div>
+
+            <div className="refresh-preset-grid">
+              {REFRESH_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={choice === String(preset) ? "is-active" : ""}
+                  aria-pressed={choice === String(preset)}
+                  onClick={() => setChoice(String(preset))}
+                >
+                  <span>{formatRefreshInterval(preset, language)}</span>
+                  {preset === 300 ? <small>{t.recommended}</small> : null}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={choice === "manual" ? "is-active" : ""}
+                aria-pressed={choice === "manual"}
+                onClick={() => setChoice("manual")}
+              >
+                <span>{t.manualRefreshOnly}</span>
+              </button>
+              <button
+                type="button"
+                className={choice === "custom" ? "is-active" : ""}
+                aria-pressed={choice === "custom"}
+                onClick={() => setChoice("custom")}
+              >
+                <span>{t.refreshCustom}</span>
+              </button>
+            </div>
+
+            {choice === "custom" ? (
+              <div className="refresh-custom-fields">
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={customValue}
+                  aria-label={t.refreshCustom}
+                  autoFocus
+                  onChange={(event) => setCustomValue(event.target.value)}
+                />
+                <select
+                  value={customUnit}
+                  aria-label={t.refreshIntervalTitle}
+                  onChange={(event) => setCustomUnit(event.target.value as RefreshUnit)}
+                >
+                  <option value="seconds">{t.secondsUnit}</option>
+                  <option value="minutes">{t.minutesUnit}</option>
+                  <option value="hours">{t.hoursUnit}</option>
+                </select>
+              </div>
+            ) : null}
+
+            {!valid ? <p className="refresh-interval-message refresh-interval-message--error">{t.refreshIntervalInvalid}</p> : null}
+            {valid && draftSeconds === 10 ? (
+              <p className="refresh-interval-message refresh-interval-message--warning"><WarningCircle />{t.refreshHighFrequencyWarning}</p>
+            ) : null}
+            {valid && draftSeconds === null ? <p className="refresh-interval-message">{t.refreshIntervalManualHint}</p> : null}
+            {valid && draftSeconds !== null && draftSeconds !== 10 ? <p className="refresh-interval-message">{t.refreshIntervalScheduleHint}</p> : null}
+
+            <div className="refresh-interval-actions">
+              <button type="button" onClick={() => setOpen(false)}>{t.cancel}</button>
+              <button type="submit" className="is-primary" disabled={!valid}>{t.save}</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 function SettingSwitch({
@@ -74,6 +272,7 @@ export const MenuPanel = memo(function MenuPanel({
   usageFailed = false,
   initialSection = "quota",
   pendingAction = null,
+  nextRefreshAt = null,
   notice = null,
   onRefresh,
   onLoadUsageStats = () => undefined,
@@ -81,6 +280,7 @@ export const MenuPanel = memo(function MenuPanel({
   onToggleAlwaysOnTop,
   onToggleAutostart,
   onToggleLanguage,
+  onSetRefreshInterval = () => undefined,
   onToggleClickThrough,
   onQuit,
 }: MenuPanelProps) {
@@ -168,6 +368,13 @@ export const MenuPanel = memo(function MenuPanel({
                 checked={autostartEnabled}
                 pending={pendingAction === "autostart"}
                 onClick={onToggleAutostart}
+              />
+              <RefreshIntervalSetting
+                seconds={preferences.quotaRefreshIntervalSeconds}
+                nextRefreshAt={nextRefreshAt}
+                language={language}
+                pending={pendingAction === "refreshInterval"}
+                onChange={onSetRefreshInterval}
               />
               <SettingSwitch
                 icon={<CursorClick />}

@@ -303,7 +303,31 @@ button:focus-visible { outline: 2px solid rgba(63, 105, 156, .72); outline-offse
 .setting-row[aria-checked="true"] .switch-control { background: var(--accent); }
 .setting-row[aria-checked="true"] .switch-control i { transform: translateX(13px); }
 .setting-row__pending { width: 15px; height: 15px; flex: 0 0 auto; color: var(--text-tertiary); }
+.setting-row__chevron { width: 13px; height: 13px; flex: 0 0 auto; color: var(--text-tertiary); }
 .setting-value { min-width: 29px; height: 24px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; color: var(--text-secondary); background: var(--surface-muted); font-size: 9px; font-weight: 700; }
+.refresh-interval-backdrop { position: fixed; inset: var(--panel-safe-inset); z-index: 30; display: grid; place-items: center; padding: 24px; border-radius: 20px; background: rgba(28, 33, 39, .32); }
+.refresh-interval-dialog { width: 100%; max-width: 320px; padding: 15px; border: 1px solid var(--border-strong); border-radius: 16px; color: var(--text); background: #f8f9fa; box-shadow: 0 18px 48px rgba(20, 26, 33, .2), 0 2px 8px rgba(20, 26, 33, .1); }
+.refresh-interval-dialog__heading { display: flex; align-items: flex-start; gap: 10px; }
+.refresh-interval-dialog__heading > div { min-width: 0; flex: 1; }
+.refresh-interval-dialog__heading strong { display: block; margin-top: 1px; font-size: 13px; font-weight: 680; }
+.refresh-interval-dialog__heading p { margin: 4px 0 0; color: var(--text-secondary); font-size: 8px; line-height: 1.45; }
+.refresh-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
+.refresh-preset-grid button { min-height: 39px; display: flex; align-items: center; justify-content: space-between; gap: 5px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--text-secondary); background: #fff; font-size: 9px; font-weight: 620; cursor: pointer; }
+.refresh-preset-grid button:hover { border-color: var(--border-strong); color: var(--text); }
+.refresh-preset-grid button.is-active { border-color: rgba(78, 111, 153, .5); color: var(--text); background: #f1f5f9; box-shadow: inset 0 0 0 1px rgba(78, 111, 153, .08); }
+.refresh-preset-grid button small { padding: 2px 4px; border-radius: 4px; color: var(--accent); background: rgba(78, 111, 153, .09); font-size: 6px; font-weight: 700; }
+.refresh-custom-fields { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 7px; margin-top: 9px; }
+.refresh-custom-fields input, .refresh-custom-fields select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--text); background: #fff; font: inherit; font-size: 10px; }
+.refresh-custom-fields input:focus, .refresh-custom-fields select:focus { border-color: rgba(78, 111, 153, .58); box-shadow: 0 0 0 2px rgba(78, 111, 153, .12); }
+.refresh-interval-message { min-height: 31px; display: flex; align-items: flex-start; gap: 5px; margin: 9px 1px 0; color: var(--text-tertiary); font-size: 7.5px; line-height: 1.45; }
+.refresh-interval-message svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: -1px; }
+.refresh-interval-message--warning { color: #8f641a; }
+.refresh-interval-message--error { color: #9a473d; }
+.refresh-interval-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 3px; padding-top: 10px; border-top: 1px solid var(--border); }
+.refresh-interval-actions button { min-width: 64px; height: 32px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-secondary); background: #fff; font-size: 9px; font-weight: 650; cursor: pointer; }
+.refresh-interval-actions button:hover { border-color: var(--border-strong); color: var(--text); }
+.refresh-interval-actions button.is-primary { border-color: var(--accent); color: #fff; background: var(--accent); }
+.refresh-interval-actions button:disabled { opacity: .45; cursor: default; }
 .panel-notice { margin-top: 9px; padding: 8px 10px; border-radius: 9px; text-align: center; }
 .quit-button { width: 100%; min-height: 35px; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; color: #8f463d; background: rgba(255, 255, 255, .72); font-size: 10px; font-weight: 620; cursor: pointer; }
 .quit-button:hover { border-color: rgba(183, 80, 67, .22); background: #fbf1ef; }

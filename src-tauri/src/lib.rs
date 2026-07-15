@@ -12,7 +12,10 @@ use std::{
 };
 
 use geometry::{GeometryController, WorkAreaPayload};
-use models::{DesktopState, ProviderSnapshot, SnapshotState, WidgetPreferences};
+use models::{
+    DesktopState, ProviderSnapshot, SnapshotState, WidgetPreferences,
+    MAX_QUOTA_REFRESH_INTERVAL_SECONDS, MIN_QUOTA_REFRESH_INTERVAL_SECONDS,
+};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -25,7 +28,6 @@ use tauri_plugin_window_state::{Builder as WindowStateBuilder, StateFlags};
 
 const TRAY_ID: &str = "main";
 const MANUAL_REFRESH_DEBOUNCE: Duration = Duration::from_secs(5);
-const NORMAL_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const FAST_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_FAILURE_BACKOFF: Duration = Duration::from_secs(30 * 60);
 const STALE_VALUE_MAX_AGE: Duration = Duration::from_secs(30 * 60);
@@ -239,6 +241,7 @@ fn next_refresh_delay(
     failure_count: u32,
     snapshots: &[ProviderSnapshot],
     now: chrono::DateTime<chrono::Utc>,
+    configured_interval: Duration,
 ) -> Duration {
     if !success {
         let backoff = failure_backoff(failure_count);
@@ -247,9 +250,41 @@ fn next_refresh_delay(
             .unwrap_or(backoff);
     }
     if is_near_reset(snapshots, now) {
-        FAST_REFRESH_INTERVAL
+        configured_interval.min(FAST_REFRESH_INTERVAL)
     } else {
-        NORMAL_REFRESH_INTERVAL
+        configured_interval
+    }
+}
+
+fn configured_refresh_interval(state: &AppState) -> Option<Duration> {
+    lock_unpoison(&state.preferences)
+        .quota_refresh_interval_seconds
+        .map(Duration::from_secs)
+}
+
+fn set_runtime_schedule(
+    runtime: &mut QuotaRuntime,
+    now_instant: Instant,
+    now_wall: chrono::DateTime<chrono::Utc>,
+    success: bool,
+    configured_interval: Option<Duration>,
+) {
+    if let Some(configured_interval) = configured_interval {
+        let delay = next_refresh_delay(
+            success,
+            runtime.failure_count,
+            &runtime.snapshots,
+            now_wall,
+            configured_interval,
+        );
+        runtime.next_refresh_instant = Some(now_instant + delay);
+        runtime.next_refresh_at = chrono::Duration::from_std(delay)
+            .ok()
+            .map(|delay| (now_wall + delay).to_rfc3339());
+    } else {
+        runtime.next_refresh_instant =
+            stale_expiration_delay(&runtime.snapshots, now_wall).map(|delay| now_instant + delay);
+        runtime.next_refresh_at = None;
     }
 }
 
@@ -400,7 +435,12 @@ fn publish_snapshot_state(app: &AppHandle, state: &AppState) {
     let _ = app.emit("snapshots-changed", snapshot_state);
 }
 
-fn should_skip_refresh(runtime: &QuotaRuntime, trigger: RefreshTrigger, now: Instant) -> bool {
+fn should_skip_refresh(
+    runtime: &QuotaRuntime,
+    trigger: RefreshTrigger,
+    now: Instant,
+    automatic_refresh_enabled: bool,
+) -> bool {
     if runtime.snapshots.is_empty() {
         return false;
     }
@@ -408,6 +448,9 @@ fn should_skip_refresh(runtime: &QuotaRuntime, trigger: RefreshTrigger, now: Ins
         return runtime
             .last_attempt_instant
             .is_some_and(|last| now.saturating_duration_since(last) < MANUAL_REFRESH_DEBOUNCE);
+    }
+    if !automatic_refresh_enabled {
+        return true;
     }
     runtime.next_refresh_instant.is_some_and(|next| now < next)
 }
@@ -419,9 +462,10 @@ async fn refresh_quota(
 ) -> Vec<ProviderSnapshot> {
     let _refresh_guard = state.refresh_lock.lock().await;
     let now = Instant::now();
+    let automatic_refresh_enabled = configured_refresh_interval(state).is_some();
     {
         let mut runtime = lock_unpoison(&state.quota);
-        if should_skip_refresh(&runtime, trigger, now) {
+        if should_skip_refresh(&runtime, trigger, now, automatic_refresh_enabled) {
             return runtime.snapshots.clone();
         }
         runtime.refreshing = true;
@@ -433,6 +477,7 @@ async fn refresh_quota(
     let success = incoming.iter().all(|snapshot| snapshot.status == "ok");
     let now_wall = chrono::Utc::now();
     let now_instant = Instant::now();
+    let configured_interval = configured_refresh_interval(state);
     let snapshots = {
         let mut runtime = lock_unpoison(&state.quota);
         runtime.failure_count = if success {
@@ -447,14 +492,12 @@ async fn refresh_quota(
         if success {
             runtime.last_success_at = Some(now_wall.to_rfc3339());
         }
-        let delay =
-            next_refresh_delay(success, runtime.failure_count, &runtime.snapshots, now_wall);
-        runtime.next_refresh_instant = Some(now_instant + delay);
-        runtime.next_refresh_at = Some(
-            (now_wall
-                + chrono::Duration::from_std(delay)
-                    .unwrap_or_else(|_| chrono::Duration::minutes(5)))
-            .to_rfc3339(),
+        set_runtime_schedule(
+            &mut runtime,
+            now_instant,
+            now_wall,
+            success,
+            configured_interval,
         );
         runtime.revision = runtime.revision.wrapping_add(1);
         runtime.snapshots.clone()
@@ -479,30 +522,76 @@ fn spawn_refresh_scheduler(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
-            let delay = app
-                .try_state::<AppState>()
-                .and_then(|state| {
-                    lock_unpoison(&state.quota)
-                        .next_refresh_instant
-                        .map(|next| next.saturating_duration_since(Instant::now()))
-                })
-                .unwrap_or(Duration::ZERO);
+            let Some(state) = app.try_state::<AppState>() else {
+                break;
+            };
+            let (has_snapshots, next_refresh) = {
+                let runtime = lock_unpoison(&state.quota);
+                (!runtime.snapshots.is_empty(), runtime.next_refresh_instant)
+            };
+
+            if !has_snapshots {
+                let _ = refresh_quota(app.clone(), state.inner(), RefreshTrigger::Scheduled).await;
+                tokio::task::yield_now().await;
+                continue;
+            }
+
+            let Some(next_refresh) = next_refresh else {
+                state.scheduler_notify.notified().await;
+                continue;
+            };
+
+            let delay = next_refresh.saturating_duration_since(Instant::now());
             if !delay.is_zero() {
-                let Some(state) = app.try_state::<AppState>() else {
-                    break;
-                };
                 tokio::select! {
                     _ = tokio::time::sleep(delay) => {}
                     _ = state.scheduler_notify.notified() => continue,
                 }
             }
-            let Some(state) = app.try_state::<AppState>() else {
-                break;
-            };
-            let _ = refresh_quota(app.clone(), state.inner(), RefreshTrigger::Scheduled).await;
+
+            if configured_refresh_interval(state.inner()).is_some() {
+                let _ = refresh_quota(app.clone(), state.inner(), RefreshTrigger::Scheduled).await;
+            } else {
+                let now_wall = chrono::Utc::now();
+                let now_instant = Instant::now();
+                {
+                    let mut runtime = lock_unpoison(&state.quota);
+                    runtime.next_refresh_instant =
+                        stale_expiration_delay(&runtime.snapshots, now_wall)
+                            .map(|next| now_instant + next);
+                    runtime.next_refresh_at = None;
+                    runtime.revision = runtime.revision.wrapping_add(1);
+                }
+                publish_snapshot_state(&app, state.inner());
+            }
             tokio::task::yield_now().await;
         }
     });
+}
+
+fn reschedule_quota(app: &AppHandle, state: &AppState) {
+    let configured_interval = configured_refresh_interval(state);
+    let now_wall = chrono::Utc::now();
+    let now_instant = Instant::now();
+    {
+        let mut runtime = lock_unpoison(&state.quota);
+        if runtime.snapshots.is_empty() {
+            runtime.next_refresh_instant = None;
+            runtime.next_refresh_at = None;
+        } else {
+            let success = runtime.failure_count == 0;
+            set_runtime_schedule(
+                &mut runtime,
+                now_instant,
+                now_wall,
+                success,
+                configured_interval,
+            );
+        }
+        runtime.revision = runtime.revision.wrapping_add(1);
+    }
+    state.scheduler_notify.notify_one();
+    publish_snapshot_state(app, state);
 }
 
 fn apply_window_preferences(
@@ -989,12 +1078,16 @@ fn set_preferences(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    commit_preferences(&app, state.inner(), |current| {
+    let previous_interval = lock_unpoison(&state.preferences).quota_refresh_interval_seconds;
+    let next = commit_preferences(&app, state.inner(), |current| {
         let widget_visible = current.widget_visible;
         *current = preferences;
         current.widget_visible = widget_visible;
-    })
-    .map(|_| ())
+    })?;
+    if previous_interval != next.quota_refresh_interval_seconds {
+        reschedule_quota(&app, state.inner());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1045,6 +1138,31 @@ fn set_language(
     state: State<'_, AppState>,
 ) -> Result<WidgetPreferences, String> {
     commit_preferences(&app, state.inner(), |next| next.language = language)
+}
+
+#[tauri::command]
+fn set_quota_refresh_interval(
+    interval_seconds: Option<u64>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WidgetPreferences, String> {
+    if interval_seconds.is_some_and(|seconds| {
+        !(MIN_QUOTA_REFRESH_INTERVAL_SECONDS..=MAX_QUOTA_REFRESH_INTERVAL_SECONDS)
+            .contains(&seconds)
+    }) {
+        return Err(format!(
+            "quota refresh interval must be between {MIN_QUOTA_REFRESH_INTERVAL_SECONDS} and {MAX_QUOTA_REFRESH_INTERVAL_SECONDS} seconds"
+        ));
+    }
+
+    let previous_interval = lock_unpoison(&state.preferences).quota_refresh_interval_seconds;
+    let next = commit_preferences(&app, state.inner(), |preferences| {
+        preferences.quota_refresh_interval_seconds = interval_seconds;
+    })?;
+    if previous_interval != next.quota_refresh_interval_seconds {
+        reschedule_quota(&app, state.inner());
+    }
+    Ok(next)
 }
 
 #[tauri::command]
@@ -1161,6 +1279,7 @@ pub fn run() {
             get_autostart,
             set_autostart,
             set_language,
+            set_quota_refresh_interval,
             quit_app
         ])
         .on_tray_icon_event(|app, event| {
@@ -1303,13 +1422,87 @@ mod tests {
         let mut stale = snapshot("stale", Some(74.0), Some(42.0));
         stale.updated_at = "2026-07-14T11:31:00Z".into();
         assert_eq!(
-            next_refresh_delay(false, 99, &[stale.clone()], now),
+            next_refresh_delay(false, 99, &[stale.clone()], now, Duration::from_secs(10),),
             Duration::from_secs(60) + Duration::from_millis(1)
         );
         assert_eq!(
-            next_refresh_delay(false, 1, &[stale], now),
+            next_refresh_delay(false, 1, &[stale], now, Duration::from_secs(10)),
             Duration::from_secs(30)
         );
+    }
+
+    #[test]
+    fn configured_interval_controls_successful_refreshes() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-07-14T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let regular = snapshot("ok", Some(74.0), Some(42.0));
+
+        assert_eq!(
+            next_refresh_delay(true, 0, &[regular], now, Duration::from_secs(10),),
+            Duration::from_secs(10)
+        );
+    }
+
+    #[test]
+    fn near_reset_only_accelerates_slower_intervals() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-07-14T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let mut near_reset = snapshot("ok", Some(74.0), Some(42.0));
+        near_reset.short_window.as_mut().unwrap().resets_at = Some("2026-07-14T12:10:00Z".into());
+
+        assert_eq!(
+            next_refresh_delay(
+                true,
+                0,
+                &[near_reset.clone()],
+                now,
+                Duration::from_secs(300),
+            ),
+            Duration::from_secs(60)
+        );
+        assert_eq!(
+            next_refresh_delay(true, 0, &[near_reset], now, Duration::from_secs(10),),
+            Duration::from_secs(10)
+        );
+    }
+
+    #[test]
+    fn manual_only_mode_skips_activation_refreshes_but_allows_manual_refresh() {
+        let now = Instant::now();
+        let runtime = QuotaRuntime {
+            snapshots: vec![snapshot("ok", Some(74.0), Some(42.0))],
+            ..QuotaRuntime::default()
+        };
+
+        assert!(should_skip_refresh(
+            &runtime,
+            RefreshTrigger::Activation,
+            now,
+            false,
+        ));
+        assert!(!should_skip_refresh(
+            &runtime,
+            RefreshTrigger::Manual,
+            now,
+            false,
+        ));
+    }
+
+    #[test]
+    fn manual_only_mode_has_no_public_next_refresh() {
+        let now_wall = chrono::Utc::now();
+        let now_instant = Instant::now();
+        let mut runtime = QuotaRuntime {
+            snapshots: vec![snapshot("ok", Some(74.0), Some(42.0))],
+            ..QuotaRuntime::default()
+        };
+
+        set_runtime_schedule(&mut runtime, now_instant, now_wall, true, None);
+
+        assert!(runtime.next_refresh_instant.is_none());
+        assert!(runtime.next_refresh_at.is_none());
     }
 
     #[test]

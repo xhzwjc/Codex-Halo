@@ -22,6 +22,7 @@ const preferences: WidgetPreferences = {
   alwaysOnTop: true,
   pinnedProvider: null,
   autoRotateSeconds: 12,
+  quotaRefreshIntervalSeconds: 300,
   language: "zh-CN",
 };
 const usageStats: UsageStats = {
@@ -161,5 +162,90 @@ describe("MenuPanel", () => {
     expect(screen.getAllByText("GPT 5.4")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "刷新额度与本地使用统计" }));
     expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
+  it("warns before saving the 10-second quota refresh interval", () => {
+    const onSetRefreshInterval = vi.fn();
+    render(
+      <MenuPanel
+        snapshot={snapshot}
+        preferences={preferences}
+        widgetVisible
+        autostartEnabled={false}
+        refreshing={false}
+        onRefresh={() => {}}
+        onToggleWidget={() => {}}
+        onToggleAlwaysOnTop={() => {}}
+        onToggleAutostart={() => {}}
+        onToggleLanguage={() => {}}
+        onSetRefreshInterval={onSetRefreshInterval}
+        onToggleClickThrough={() => {}}
+        onQuit={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /额度自动刷新/ }));
+    expect(screen.getByRole("dialog", { name: "自动刷新频率" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "每 10 秒" }));
+    expect(screen.getByText(/增加接口请求/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(onSetRefreshInterval).toHaveBeenCalledWith(10);
+  });
+
+  it("accepts a validated custom quota refresh interval", () => {
+    const onSetRefreshInterval = vi.fn();
+    render(
+      <MenuPanel
+        snapshot={snapshot}
+        preferences={preferences}
+        widgetVisible
+        autostartEnabled={false}
+        refreshing={false}
+        onRefresh={() => {}}
+        onToggleWidget={() => {}}
+        onToggleAlwaysOnTop={() => {}}
+        onToggleAutostart={() => {}}
+        onToggleLanguage={() => {}}
+        onSetRefreshInterval={onSetRefreshInterval}
+        onToggleClickThrough={() => {}}
+        onQuit={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /额度自动刷新/ }));
+    fireEvent.click(screen.getByRole("button", { name: "自定义" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "自定义" }), { target: { value: "2" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "自动刷新频率" }), { target: { value: "minutes" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(onSetRefreshInterval).toHaveBeenCalledWith(120);
+  });
+
+  it("rejects a custom quota refresh interval shorter than 10 seconds", () => {
+    render(
+      <MenuPanel
+        snapshot={snapshot}
+        preferences={preferences}
+        widgetVisible
+        autostartEnabled={false}
+        refreshing={false}
+        onRefresh={() => {}}
+        onToggleWidget={() => {}}
+        onToggleAlwaysOnTop={() => {}}
+        onToggleAutostart={() => {}}
+        onToggleLanguage={() => {}}
+        onToggleClickThrough={() => {}}
+        onQuit={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /额度自动刷新/ }));
+    fireEvent.click(screen.getByRole("button", { name: "自定义" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "自定义" }), { target: { value: "9" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "自动刷新频率" }), { target: { value: "seconds" } });
+
+    expect(screen.getByText("请输入 10 秒到 24 小时之间的时间")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
   });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopEventHandlers } from "./lib/bridge";
 import type { DesktopState, ProviderSnapshot, UsageStats, WidgetPreferences } from "./types";
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getDesktopView: vi.fn(),
   refreshSnapshots: vi.fn(),
   getUsageStats: vi.fn(),
+  setQuotaRefreshInterval: vi.fn(),
 }));
 
 const preferences: WidgetPreferences = {
@@ -20,6 +21,7 @@ const preferences: WidgetPreferences = {
   alwaysOnTop: true,
   pinnedProvider: null,
   autoRotateSeconds: 12,
+  quotaRefreshIntervalSeconds: 300,
   language: "zh-CN",
 };
 const snapshot: ProviderSnapshot = {
@@ -65,7 +67,7 @@ const usageStats: UsageStats = {
 };
 
 vi.mock("./lib/bridge", () => ({
-  defaultPreferences: { locked: false, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" },
+  defaultPreferences: { locked: false, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, quotaRefreshIntervalSeconds: 300, language: "en" },
   getDesktopView: () => mocks.getDesktopView(),
   getAppState: () => {
     mocks.order.push("get");
@@ -83,6 +85,7 @@ vi.mock("./lib/bridge", () => ({
   setAutostart: vi.fn(),
   setClickThrough: vi.fn(),
   setLanguage: vi.fn(),
+  setQuotaRefreshInterval: (seconds: number | null) => mocks.setQuotaRefreshInterval(seconds),
   setWidgetVisible: vi.fn(),
   setWidgetExpanded: vi.fn().mockResolvedValue(undefined),
   startDragging: vi.fn(),
@@ -100,6 +103,10 @@ describe("App native state subscription", () => {
     mocks.getAppState.mockReset().mockResolvedValue(desktopState);
     mocks.refreshSnapshots.mockReset().mockResolvedValue([snapshot]);
     mocks.getUsageStats.mockReset().mockResolvedValue(usageStats);
+    mocks.setQuotaRefreshInterval.mockReset().mockImplementation((seconds: number | null) => Promise.resolve({
+      ...preferences,
+      quotaRefreshIntervalSeconds: seconds,
+    }));
   });
 
   it("subscribes before hydration and applies later snapshot revisions", async () => {
@@ -186,5 +193,18 @@ describe("App native state subscription", () => {
       expect(mocks.refreshSnapshots).toHaveBeenCalledOnce();
       expect(mocks.getUsageStats).toHaveBeenCalledOnce();
     });
+  });
+
+  it("updates the quota timer without refreshing quota or usage statistics", async () => {
+    render(<App />);
+    await screen.findByText("74");
+
+    fireEvent.click(screen.getByRole("button", { name: /额度自动刷新/ }));
+    fireEvent.click(screen.getByRole("button", { name: "每 10 秒" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => expect(mocks.setQuotaRefreshInterval).toHaveBeenCalledWith(10));
+    expect(mocks.refreshSnapshots).not.toHaveBeenCalled();
+    expect(mocks.getUsageStats).not.toHaveBeenCalled();
   });
 });

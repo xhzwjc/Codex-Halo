@@ -28,6 +28,7 @@ export interface WidgetPreferences {
   alwaysOnTop: boolean;
   pinnedProvider: ProviderId | null;
   autoRotateSeconds: number;
+  quotaRefreshIntervalSeconds: number | null;
   language: Language;
 }
 

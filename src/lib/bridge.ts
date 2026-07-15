@@ -14,7 +14,8 @@ export const defaultPreferences: WidgetPreferences = {
   alwaysOnTop: true,
   pinnedProvider: null,
   autoRotateSeconds: 12,
-  language: "zh-CN",
+  quotaRefreshIntervalSeconds: 300,
+  language: "en",
 };
 
 const emptySnapshotState = (): SnapshotState => ({
@@ -122,6 +123,10 @@ export async function setLanguage(language: Language): Promise<WidgetPreferences
     await updatePreferences(preferences);
     return preferences;
   }
+}
+
+export async function setQuotaRefreshInterval(intervalSeconds: number | null): Promise<WidgetPreferences> {
+  return invokeDesktop<WidgetPreferences>("set_quota_refresh_interval", { intervalSeconds });
 }
 
 export async function setClickThrough(locked: boolean): Promise<WidgetPreferences> {
