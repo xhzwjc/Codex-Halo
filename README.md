@@ -51,6 +51,16 @@ For normal users, download the latest unsigned build from GitHub Releases:
 
 Run the Windows setup executable, or open the macOS DMG and drag Codex Halo into Applications. Unsigned builds may trigger Windows SmartScreen or macOS Gatekeeper warnings. GitHub also adds its own source-code ZIP and TAR archives to every release; those are not application installers.
 
+### macOS says Codex Halo is damaged
+
+The current macOS build is unsigned and not notarized, so Gatekeeper may report that the app is damaged. If you downloaded the DMG from the official Codex Halo Releases page, drag Codex Halo into Applications and run this command in Terminal:
+
+```bash
+sudo xattr -r -d com.apple.quarantine "/Applications/Codex Halo.app"
+```
+
+Enter your macOS login password when prompted, then open Codex Halo again. This command removes the quarantine attribute from Codex Halo only; it does not disable Gatekeeper globally. Do not use it for an app downloaded from an untrusted source.
+
 ## Feedback
 
 Please use GitHub Issues for bugs, compatibility reports, and feature requests:
