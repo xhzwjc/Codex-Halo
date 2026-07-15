@@ -1,5 +1,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import type { ProviderSnapshot, WidgetPreferences } from "../types";
+import { aggregateModels } from "../lib/usage";
+import type { DailyTokenUsage, ProviderSnapshot, UsageStats, WidgetPreferences } from "../types";
+import { MenuPanel } from "./MenuPanel";
 import { QuotaCard, QuotaOrb } from "./QuotaCard";
 
 const preview: ProviderSnapshot = {
@@ -15,6 +17,62 @@ const preview: ProviderSnapshot = {
   message: null,
 };
 const preferences: WidgetPreferences = { locked: false, alwaysOnTop: true, pinnedProvider: "codex", autoRotateSeconds: 12, language: "en" };
+
+function previewDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const previewDaily: DailyTokenUsage[] = Array.from({ length: 365 }, (_, index) => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - (364 - index));
+  const recent = index > 260;
+  const active = recent && (index % 5 !== 0 || index > 345);
+  const totalTokens = active ? 480_000 + ((index * 7919) % 8_900_000) : 0;
+  const primaryTokens = Math.round(totalTokens * .68);
+  const secondaryTokens = totalTokens - primaryTokens;
+  const modelUsage = (model: string, total: number) => ({
+    model,
+    inputTokens: Math.round(total * .84),
+    cachedInputTokens: Math.round(total * .31),
+    outputTokens: total - Math.round(total * .84),
+    reasoningOutputTokens: Math.round(total * .05),
+    totalTokens: total,
+  });
+  return {
+    date: previewDate(date),
+    inputTokens: Math.round(totalTokens * .84),
+    cachedInputTokens: Math.round(totalTokens * .31),
+    outputTokens: totalTokens - Math.round(totalTokens * .84),
+    reasoningOutputTokens: Math.round(totalTokens * .05),
+    totalTokens,
+    sessionCount: active ? 1 + (index % 3) : 0,
+    models: active ? [modelUsage("gpt-5.4", primaryTokens), modelUsage("gpt-5.6-sol", secondaryTokens)] : [],
+  };
+}).filter((day) => day.totalTokens > 0);
+
+const previewUsageStats: UsageStats = {
+  status: "ok",
+  generatedAt: new Date().toISOString(),
+  firstActivityDate: previewDaily[0]?.date ?? null,
+  lastActivityDate: previewDaily.at(-1)?.date ?? null,
+  inputTokens: previewDaily.reduce((sum, day) => sum + day.inputTokens, 0),
+  cachedInputTokens: previewDaily.reduce((sum, day) => sum + day.cachedInputTokens, 0),
+  outputTokens: previewDaily.reduce((sum, day) => sum + day.outputTokens, 0),
+  reasoningOutputTokens: previewDaily.reduce((sum, day) => sum + day.reasoningOutputTokens, 0),
+  totalTokens: previewDaily.reduce((sum, day) => sum + day.totalTokens, 0),
+  sessionCount: previewDaily.reduce((sum, day) => sum + day.sessionCount, 0),
+  activeDays: previewDaily.length,
+  currentStreak: 19,
+  longestStreak: 19,
+  indexedFiles: 148,
+  skippedFiles: 0,
+  models: aggregateModels(previewDaily),
+  daily: previewDaily,
+};
 
 interface Values {
   radius: number;
@@ -91,6 +149,31 @@ export function DesignPlayground() {
   const update = <K extends keyof Values>(key: K, value: Values[K]) => setValues((current) => ({ ...current, [key]: value }));
 
   if (screenshotMode) {
+    if (shotKind === "stats") {
+      return (
+        <div className="screenshot-stage screenshot-stage--panel" style={style}>
+          <div className="design-panel-frame">
+            <MenuPanel
+              snapshot={preview}
+              preferences={preferences}
+              widgetVisible
+              autostartEnabled
+              refreshing={false}
+              usageStats={previewUsageStats}
+              initialSection="stats"
+              onRefresh={() => {}}
+              onToggleWidget={() => {}}
+              onToggleAlwaysOnTop={() => {}}
+              onToggleAutostart={() => {}}
+              onToggleLanguage={() => {}}
+              onToggleClickThrough={() => {}}
+              onQuit={() => {}}
+            />
+          </div>
+        </div>
+      );
+    }
+
     if (shotKind === "states") {
       return (
         <div className="screenshot-stage screenshot-stage--states" style={style}>
