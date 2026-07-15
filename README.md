@@ -110,6 +110,14 @@ GitHub Actions are configured for:
 - CI on push/PR: frontend tests, TypeScript/Vite build, dependency audit, Rust tests, and Tauri builds.
 - `v*` tags: direct unsigned Windows NSIS/MSI installers, a macOS Universal DMG, and a public GitHub Release.
 
+After feature changes are committed and `main` is clean, publish a version with one command:
+
+```bash
+npm run release -- 0.2.2
+```
+
+The command synchronizes every application version, runs frontend and Rust checks, creates the release commit and annotated tag, and atomically pushes both to `origin`. If the requested version is already synchronized, it tags the current clean commit without creating a redundant version commit. GitHub Actions performs the Windows/macOS installer builds and publishes the Release. Use `--dry-run` to validate a release without changing files or Git state.
+
 See [docs/GITHUB-RELEASE-CHECKLIST.md](docs/GITHUB-RELEASE-CHECKLIST.md) before publishing a version for others.
 
 Do not upload local credentials, `.codex`, `.env*`, screenshots with personal data, `node_modules`, `dist`, `src-tauri/target`, or local installers to source control.

@@ -14,12 +14,15 @@ macOS 包使用 Universal 构建，同时支持 Apple Silicon 和 Intel Mac。
 
 ## 发布一个 GitHub 下载版本
 
-推送 `v*` tag 会触发 `.github/workflows/release.yml`，构建 Windows unsigned 包和 macOS Universal unsigned 包，并创建公开 GitHub Release。
+日常功能变更已经提交且 `main` 工作区干净后，只需运行一个命令：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+npm run release -- 0.2.2
 ```
+
+确认一次后，脚本会统一更新 `package.json`、`package-lock.json`、`Cargo.toml`、`Cargo.lock` 和 `tauri.conf.json` 的版本，运行前端与 Rust 检查，创建 release commit 和 annotated tag，再使用 atomic push 同时推送 `main` 与 tag。如果目标版本已经同步，则直接标记当前干净提交，不再创建无意义的重复版本提交。需要只检查而不修改时使用 `npm run release -- 0.2.2 --dry-run`。
+
+推送 `v*` tag 会触发 `.github/workflows/release.yml`，由 GitHub Actions 构建 Windows unsigned 安装包和 macOS Universal unsigned DMG，并创建公开 GitHub Release。
 
 工作流先把各平台安装包保存为 GitHub Actions 内部 artifact，两个平台全部成功后再由单独的 publish job 把 `.dmg`、`-setup.exe` 和 `.msi` 直接上传到 GitHub Release。Actions artifact 下载时仍会由 GitHub 包装为 ZIP，这是内部构建留档；公开 Release 不再额外套 ZIP。工作流完成后，到 GitHub Releases 检查自动生成的说明和附件；如需人工审批，应先把 workflow 的 `draft` 改为 `true`。
 

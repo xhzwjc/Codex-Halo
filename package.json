@@ -1,12 +1,13 @@
 {
   "name": "codex-halo",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
+    "release": "node scripts/release.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

@@ -47,12 +47,13 @@ git push origin main
 
 ## 生成可分享版本
 
-推送 `v*` tag 会触发 release workflow：
+确保功能代码已经提交、当前位于干净的 `main` 后，使用一条命令发布：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+npm run release -- 0.2.2
 ```
+
+脚本会完成五处版本同步、前端和 Rust 检查、release commit、annotated tag 以及 `main` 和 tag 的原子推送；如果版本已经同步，则直接标记当前干净提交。只想预检时执行 `npm run release -- 0.2.2 --dry-run`。tag 推送后会自动触发 release workflow，不需要再逐条输入 Git 命令。
 
 构建完成后，到 GitHub 仓库的 Releases 页面检查公开 Release。附件应包含：
 
