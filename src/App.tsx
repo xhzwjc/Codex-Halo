@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FloatingWidget } from "./components/FloatingWidget";
 import { MenuPanel } from "./components/MenuPanel";
 import {
   defaultPreferences,
   getAppState,
   getDesktopView,
+  getUsageStats,
   listenDesktopEvents,
   quitApp,
   refreshSnapshots,
@@ -16,7 +17,7 @@ import {
 } from "./lib/bridge";
 import { copy, nextLanguage, normalizeLanguage } from "./lib/i18n";
 import { emptySnapshot, mergeSnapshots } from "./lib/snapshots";
-import type { DesktopState, DesktopView, SnapshotState, WidgetPreferences } from "./types";
+import type { DesktopState, DesktopView, SnapshotState, UsageStats, WidgetPreferences } from "./types";
 
 const INITIAL_STATE: DesktopState = {
   snapshots: [],
@@ -30,6 +31,8 @@ const INITIAL_STATE: DesktopState = {
   nextRefreshAt: null,
 };
 
+const USAGE_STATS_REVALIDATE_MS = 60_000;
+
 export default function App() {
   const [desktopState, setDesktopState] = useState<DesktopState>(INITIAL_STATE);
   const [view, setView] = useState<DesktopView>(() => new URLSearchParams(window.location.search).get("view") === "panel" ? "panel" : "widget");
@@ -37,6 +40,11 @@ export default function App() {
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageFailed, setUsageFailed] = useState(false);
+  const usageLoadingRef = useRef(false);
+  const usageLoadedAtRef = useRef(0);
   const language = normalizeLanguage(desktopState.preferences.language);
   const t = copy[language];
 
@@ -146,6 +154,26 @@ export default function App() {
     }
   }, [desktopState.refreshing, manualRefreshing, t.refreshFailed]);
 
+  const handleUsageStats = useCallback(async (force = false) => {
+    if (usageLoadingRef.current || (!force && Date.now() - usageLoadedAtRef.current < USAGE_STATS_REVALIDATE_MS)) return;
+    usageLoadingRef.current = true;
+    setUsageLoading(true);
+    setUsageFailed(false);
+    try {
+      setUsageStats(await getUsageStats());
+      usageLoadedAtRef.current = Date.now();
+    } catch {
+      setUsageFailed(true);
+    } finally {
+      usageLoadingRef.current = false;
+      setUsageLoading(false);
+    }
+  }, []);
+
+  const handleRefreshAll = useCallback(async () => {
+    await Promise.allSettled([handleRefresh(), handleUsageStats(true)]);
+  }, [handleRefresh, handleUsageStats]);
+
   const runPreferenceAction = useCallback(async (
     key: string,
     operation: () => Promise<WidgetPreferences>,
@@ -208,9 +236,13 @@ export default function App() {
         widgetVisible={desktopState.widgetVisible}
         autostartEnabled={desktopState.autostartEnabled}
         refreshing={refreshing}
+        usageStats={usageStats}
+        usageLoading={usageLoading}
+        usageFailed={usageFailed}
         pendingAction={pendingAction}
         notice={notice}
-        onRefresh={() => { void handleRefresh(); }}
+        onRefresh={() => { void handleRefreshAll(); }}
+        onLoadUsageStats={() => { void handleUsageStats(false); }}
         onToggleWidget={() => { void handleWidgetVisibility(); }}
         onToggleAlwaysOnTop={() => { void runPreferenceAction("alwaysOnTop", () => setAlwaysOnTop(!desktopState.preferences.alwaysOnTop)); }}
         onToggleAutostart={() => { void handleAutostart(); }}

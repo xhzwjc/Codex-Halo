@@ -23,7 +23,7 @@ This macOS build is unsigned and not notarized. If macOS blocks the first launch
 
 ## Privacy
 
-Codex Halo does not store Codex tokens, account IDs, prompts, chats, raw quota responses, or local auth paths. It stores only widget preferences. See `PRIVACY.md`.
+Codex Halo does not store Codex tokens, account IDs, prompts, chats, tool output, raw quota responses, or local auth paths. It stores widget preferences and a local date/model/token aggregate index for the on-demand Usage Stats view. See `PRIVACY.md`.
 
 ## Notes
 

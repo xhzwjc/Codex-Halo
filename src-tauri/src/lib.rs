@@ -1,11 +1,12 @@
 mod codex;
 mod geometry;
 mod models;
+mod usage_stats;
 
 use std::{
     fs,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, MutexGuard},
     time::{Duration, Instant},
 };
@@ -32,6 +33,7 @@ const PANEL_MARGIN: i32 = 8;
 const PANEL_LOGICAL_WIDTH: f64 = 384.0;
 const PANEL_LOGICAL_HEIGHT: f64 = 668.0;
 const PANEL_BLUR_DISMISS_DELAY: Duration = Duration::from_millis(160);
+const LEGACY_CONFIG_IDENTIFIER: &str = "app.quotafloat.desktop";
 
 #[derive(Default)]
 struct QuotaRuntime {
@@ -79,6 +81,8 @@ struct AppState {
     preferences_path: PathBuf,
     quota: Mutex<QuotaRuntime>,
     refresh_lock: tokio::sync::Mutex<()>,
+    usage_index_path: PathBuf,
+    usage_refresh_lock: tokio::sync::Mutex<()>,
     scheduler_notify: tokio::sync::Notify,
     geometry: GeometryController,
     tray_menu: Mutex<Option<TrayMenuItems>>,
@@ -95,6 +99,28 @@ fn lock_unpoison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn migrate_legacy_app_data(data_dir: &Path) {
+    let Some(parent) = data_dir.parent() else {
+        return;
+    };
+    let legacy_dir = parent.join(LEGACY_CONFIG_IDENTIFIER);
+    if legacy_dir == data_dir || !legacy_dir.is_dir() || fs::create_dir_all(data_dir).is_err() {
+        return;
+    }
+    for file_name in [
+        "preferences.json",
+        "preferences.json.bak",
+        "usage-index-v1.json",
+        ".window-state.json",
+    ] {
+        let source = legacy_dir.join(file_name);
+        let target = data_dir.join(file_name);
+        if source.is_file() && !target.exists() {
+            let _ = fs::copy(source, target);
+        }
+    }
 }
 
 fn load_preferences(path: &PathBuf) -> WidgetPreferences {
@@ -920,6 +946,15 @@ async fn refresh_snapshots(
 }
 
 #[tauri::command]
+async fn get_usage_stats(state: State<'_, AppState>) -> Result<usage_stats::UsageStats, String> {
+    let _refresh = state.usage_refresh_lock.lock().await;
+    let index_path = state.usage_index_path.clone();
+    tokio::task::spawn_blocking(move || usage_stats::load_usage_stats(&index_path))
+        .await
+        .map_err(|_| "usage statistics task failed".to_string())?
+}
+
+#[tauri::command]
 fn expand_widget(
     work_area: Option<WorkAreaPayload>,
     app: AppHandle,
@@ -1054,7 +1089,9 @@ pub fn run() {
         )
         .setup(|app| {
             let data_dir = app.path().app_config_dir()?;
+            migrate_legacy_app_data(&data_dir);
             let preferences_path = data_dir.join("preferences.json");
+            let usage_index_path = data_dir.join("usage-index-v1.json");
             let preferences = load_preferences(&preferences_path);
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(12))
@@ -1069,6 +1106,8 @@ pub fn run() {
                 preferences_path,
                 quota: Mutex::new(QuotaRuntime::default()),
                 refresh_lock: tokio::sync::Mutex::new(()),
+                usage_index_path,
+                usage_refresh_lock: tokio::sync::Mutex::new(()),
                 scheduler_notify: tokio::sync::Notify::new(),
                 geometry: GeometryController::default(),
                 tray_menu: Mutex::new(None),
@@ -1109,6 +1148,7 @@ pub fn run() {
             get_app_state,
             get_snapshots,
             refresh_snapshots,
+            get_usage_stats,
             expand_widget,
             collapse_widget,
             begin_widget_drag,
@@ -1377,5 +1417,38 @@ mod tests {
             },
         );
         assert_eq!(position, PhysicalPosition::new(2616, 56));
+    }
+
+    #[test]
+    fn legacy_config_migration_preserves_new_files_and_copies_missing_indexes() {
+        let base = std::env::temp_dir().join(format!(
+            "codex-halo-config-migration-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let legacy = base.join(LEGACY_CONFIG_IDENTIFIER);
+        let current = base.join("app.codexhalo.desktop");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::create_dir_all(&current).unwrap();
+        fs::write(legacy.join("preferences.json"), b"legacy preferences").unwrap();
+        fs::write(legacy.join("usage-index-v1.json"), b"legacy index").unwrap();
+        fs::write(legacy.join(".window-state.json"), b"legacy window state").unwrap();
+        fs::write(current.join("preferences.json"), b"current preferences").unwrap();
+
+        migrate_legacy_app_data(&current);
+
+        assert_eq!(
+            fs::read(current.join("preferences.json")).unwrap(),
+            b"current preferences"
+        );
+        assert_eq!(
+            fs::read(current.join("usage-index-v1.json")).unwrap(),
+            b"legacy index"
+        );
+        assert_eq!(
+            fs::read(current.join(".window-state.json")).unwrap(),
+            b"legacy window state"
+        );
+        let _ = fs::remove_dir_all(base);
     }
 }

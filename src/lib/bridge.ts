@@ -5,6 +5,7 @@ import type {
   ProviderSnapshot,
   SnapshotEventPayload,
   SnapshotState,
+  UsageStats,
   WidgetPreferences,
 } from "../types";
 
@@ -98,6 +99,10 @@ export async function fetchSnapshots(force = false): Promise<ProviderSnapshot[]>
 
 export async function refreshSnapshots(): Promise<ProviderSnapshot[]> {
   return fetchSnapshots(true);
+}
+
+export async function getUsageStats(): Promise<UsageStats> {
+  return invokeDesktop<UsageStats>("get_usage_stats");
 }
 
 export async function getPreferences(): Promise<WidgetPreferences> {

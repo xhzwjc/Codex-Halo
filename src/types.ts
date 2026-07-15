@@ -49,3 +49,45 @@ export interface DesktopState extends SnapshotState {
 export type SnapshotEventPayload = ProviderSnapshot[] | Partial<SnapshotState> & {
   snapshots: ProviderSnapshot[];
 };
+
+export type UsageStatsStatus = "ok" | "empty" | "unavailable";
+
+export interface ModelTokenUsage {
+  model: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+}
+
+export interface DailyTokenUsage {
+  date: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  sessionCount: number;
+  models: ModelTokenUsage[];
+}
+
+export interface UsageStats {
+  status: UsageStatsStatus;
+  generatedAt: string;
+  firstActivityDate: string | null;
+  lastActivityDate: string | null;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  sessionCount: number;
+  activeDays: number;
+  currentStreak: number;
+  longestStreak: number;
+  indexedFiles: number;
+  skippedFiles: number;
+  models: ModelTokenUsage[];
+  daily: DailyTokenUsage[];
+}

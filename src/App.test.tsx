@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopEventHandlers } from "./lib/bridge";
-import type { DesktopState, ProviderSnapshot, WidgetPreferences } from "./types";
+import type { DesktopState, ProviderSnapshot, UsageStats, WidgetPreferences } from "./types";
 
 const mocks = vi.hoisted(() => ({
   order: [] as string[],
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getAppState: vi.fn(),
   getDesktopView: vi.fn(),
   refreshSnapshots: vi.fn(),
+  getUsageStats: vi.fn(),
 }));
 
 const preferences: WidgetPreferences = {
@@ -43,6 +44,25 @@ const desktopState: DesktopState = {
   lastSuccessAt: snapshot.updatedAt,
   nextRefreshAt: null,
 };
+const usageStats: UsageStats = {
+  status: "ok",
+  generatedAt: "2026-07-15T00:00:00Z",
+  firstActivityDate: "2026-07-15",
+  lastActivityDate: "2026-07-15",
+  inputTokens: 900,
+  cachedInputTokens: 0,
+  outputTokens: 100,
+  reasoningOutputTokens: 0,
+  totalTokens: 1000,
+  sessionCount: 1,
+  activeDays: 1,
+  currentStreak: 1,
+  longestStreak: 1,
+  indexedFiles: 1,
+  skippedFiles: 0,
+  models: [],
+  daily: [],
+};
 
 vi.mock("./lib/bridge", () => ({
   defaultPreferences: { locked: false, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" },
@@ -57,6 +77,7 @@ vi.mock("./lib/bridge", () => ({
     return () => undefined;
   },
   refreshSnapshots: () => mocks.refreshSnapshots(),
+  getUsageStats: () => mocks.getUsageStats(),
   quitApp: vi.fn(),
   setAlwaysOnTop: vi.fn(),
   setAutostart: vi.fn(),
@@ -78,6 +99,7 @@ describe("App native state subscription", () => {
     mocks.getDesktopView.mockReset().mockResolvedValue("panel");
     mocks.getAppState.mockReset().mockResolvedValue(desktopState);
     mocks.refreshSnapshots.mockReset().mockResolvedValue([snapshot]);
+    mocks.getUsageStats.mockReset().mockResolvedValue(usageStats);
   });
 
   it("subscribes before hydration and applies later snapshot revisions", async () => {
@@ -150,5 +172,19 @@ describe("App native state subscription", () => {
 
     expect(await screen.findAllByText("正在读取额度")).toHaveLength(2);
     expect(screen.queryByText("暂时无法读取")).not.toBeInTheDocument();
+  });
+
+  it("refreshes quota and local usage together from the panel action", async () => {
+    render(<App />);
+    await screen.findByText("74");
+
+    act(() => {
+      screen.getByRole("button", { name: "刷新额度与本地使用统计" }).click();
+    });
+
+    await waitFor(() => {
+      expect(mocks.refreshSnapshots).toHaveBeenCalledOnce();
+      expect(mocks.getUsageStats).toHaveBeenCalledOnce();
+    });
   });
 });
