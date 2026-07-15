@@ -15,15 +15,15 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact-name: codex-halo-windows-unsigned
-            archive-name: codex-halo-windows-unsigned.zip
+            artifact-name: codex-halo-windows-installers-unsigned
             build-command: npm run tauri -- build
-            artifact-path: src-tauri/target/release/bundle/*
+            artifact-path: |
+              src-tauri/target/release/bundle/nsis/*-setup.exe
+              src-tauri/target/release/bundle/msi/*.msi
           - os: macos-latest
-            artifact-name: codex-halo-macos-universal-unsigned
-            archive-name: codex-halo-macos-universal-unsigned.zip
+            artifact-name: codex-halo-macos-universal-installer-unsigned
             build-command: npm run tauri -- build --target universal-apple-darwin
-            artifact-path: src-tauri/target/universal-apple-darwin/release/bundle/*
+            artifact-path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,17 +42,27 @@ jobs:
       - run: npm test
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: ${{ matrix.build-command }}
-      - name: Archive bundle
-        shell: pwsh
-        run: Compress-Archive -Path "${{ matrix.artifact-path }}" -DestinationPath "${{ matrix.archive-name }}" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.archive-name }}
+          path: ${{ matrix.artifact-path }}
           if-no-files-found: error
           retention-days: 90
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.archive-name }}
+          files: |
+            release-assets/**/*.dmg
+            release-assets/**/*-setup.exe
+            release-assets/**/*.msi
+          fail_on_unmatched_files: true
           draft: false
           generate_release_notes: true

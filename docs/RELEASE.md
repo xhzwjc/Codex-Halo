@@ -4,10 +4,11 @@
 
 Codex Halo 使用同一套 React/CSS/Tauri 代码构建 Windows 和 macOS 版本。视觉效果、悬浮球、展开卡片、透明度、圆角和动画参数都应保持在共享前端代码中，避免维护 Windows/macOS 两套 UI。
 
-当前发布默认输出 unsigned 包：
+当前公开 Release 默认直接输出 unsigned 原生安装包：
 
-- `codex-halo-windows-unsigned.zip`
-- `codex-halo-macos-universal-unsigned.zip`
+- `Codex Halo_<version>_x64-setup.exe`：Windows 普通用户安装程序。
+- `Codex Halo_<version>_x64_en-US.msi`：Windows 企业部署安装程序。
+- `Codex Halo_<version>_universal.dmg`：macOS Universal 安装映像。
 
 macOS 包使用 Universal 构建，同时支持 Apple Silicon 和 Intel Mac。
 
@@ -20,7 +21,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-工作流完成后，到 GitHub Releases 检查自动生成的说明和附件；如需人工审批，应先把 workflow 的 `draft` 改为 `true`。
+工作流先把各平台安装包保存为 GitHub Actions 内部 artifact，两个平台全部成功后再由单独的 publish job 把 `.dmg`、`-setup.exe` 和 `.msi` 直接上传到 GitHub Release。Actions artifact 下载时仍会由 GitHub 包装为 ZIP，这是内部构建留档；公开 Release 不再额外套 ZIP。工作流完成后，到 GitHub Releases 检查自动生成的说明和附件；如需人工审批，应先把 workflow 的 `draft` 改为 `true`。
 
 ## CI 与构建
 
@@ -45,8 +46,8 @@ npm run tauri -- build --target universal-apple-darwin
 
 因为当前 macOS 包未签名、未公证，首次打开时 Gatekeeper 可能会阻止启动。小范围测试用户可以使用以下方式打开：
 
-1. 解压下载的 macOS zip。
-2. 将应用移动到 Applications 或任意测试目录。
+1. 打开下载的 macOS DMG。
+2. 将 Codex Halo 拖到 Applications。
 3. 右键点击应用，选择 Open。
 4. 在系统提示中再次选择 Open。
 

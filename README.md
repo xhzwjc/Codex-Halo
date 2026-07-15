@@ -45,10 +45,11 @@ The production web entry never substitutes mock quota. A development-only `?desi
 For normal users, download the latest unsigned build from GitHub Releases:
 
 - Latest release: https://github.com/xhzwjc/Codex-Halo/releases/latest
-- Windows: `codex-halo-windows-unsigned.zip`
-- macOS Universal: `codex-halo-macos-universal-unsigned.zip`
+- Windows: `Codex Halo_<version>_x64-setup.exe`
+- Windows enterprise deployment: `Codex Halo_<version>_x64_en-US.msi`
+- macOS Universal: `Codex Halo_<version>_universal.dmg`
 
-Unzip it and run the app. Unsigned builds may trigger Windows SmartScreen or macOS Gatekeeper warnings. Public distribution to non-technical users should use signed Windows builds and notarized macOS builds.
+Run the Windows setup executable, or open the macOS DMG and drag Codex Halo into Applications. Unsigned builds may trigger Windows SmartScreen or macOS Gatekeeper warnings. GitHub also adds its own source-code ZIP and TAR archives to every release; those are not application installers.
 
 ## Feedback
 
@@ -107,7 +108,7 @@ src-tauri/target/release/codex-halo.exe
 GitHub Actions are configured for:
 
 - CI on push/PR: frontend tests, TypeScript/Vite build, dependency audit, Rust tests, and Tauri builds.
-- `v*` tags: unsigned Windows and macOS Universal bundle artifacts and a public GitHub Release.
+- `v*` tags: direct unsigned Windows NSIS/MSI installers, a macOS Universal DMG, and a public GitHub Release.
 
 See [docs/GITHUB-RELEASE-CHECKLIST.md](docs/GITHUB-RELEASE-CHECKLIST.md) before publishing a version for others.
 

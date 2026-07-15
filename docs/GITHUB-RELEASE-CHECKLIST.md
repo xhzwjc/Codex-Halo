@@ -54,19 +54,20 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-构建完成后，到 GitHub 仓库的 Releases 页面检查 draft release。附件应包含：
+构建完成后，到 GitHub 仓库的 Releases 页面检查公开 Release。附件应包含：
 
-- `codex-halo-windows-unsigned.zip`
-- `codex-halo-macos-universal-unsigned.zip`
+- `Codex Halo_<version>_x64-setup.exe`
+- `Codex Halo_<version>_x64_en-US.msi`
+- `Codex Halo_<version>_universal.dmg`
 
-当前 workflow 会直接创建公开 Release。确认附件与自动生成说明无误后，把 Release 链接发给用户；如需先审核，请把 workflow 的 `draft` 改为 `true`。
+当前 workflow 会在两个平台构建全部成功后，由单独的 publish job 一次性创建公开 Release，并直接上传原生安装包。确认附件与自动生成说明无误后，把 Release 链接发给用户；如需先审核，请把 workflow 的 `draft` 改为 `true`。Releases 页面自动出现的 Source code ZIP/TAR 是 GitHub 生成的源码归档，不是安装包。
 
 ## 发给 Mac 用户时的说明
 
 当前 macOS 包是 unsigned 包。用户首次打开可能会被 Gatekeeper 拦截，可以这样打开：
 
-1. 下载 `codex-halo-macos-universal-unsigned.zip`。
-2. 解压后把应用拖到 Applications 或任意测试目录。
+1. 下载并打开 `Codex Halo_<version>_universal.dmg`。
+2. 把 Codex Halo 拖到 Applications。
 3. 右键点击应用，选择 Open。
 4. 在系统提示里再次选择 Open。
 5. 如果仍被拦截，到 System Settings -> Privacy & Security 里允许打开。

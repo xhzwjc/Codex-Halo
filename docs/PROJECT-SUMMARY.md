@@ -19,7 +19,7 @@ Codex Halo 是一个 Tauri 2 桌面额度与本地使用统计工具，用本机
 - 统一数据流：Rust 持有唯一额度状态、刷新锁和调度器，菜单栏、面板及悬浮窗通过同一事件同步，前端不创建独立轮询。
 - 自适应刷新：默认 5 分钟，支持 10 秒、30 秒、1/5/10/30 分钟预设、10 秒至 24 小时自定义以及仅手动模式；较慢周期在重置边界附近加速到 1 分钟，失败采用 30 秒至 30 分钟的有界指数退避；手动刷新 5 秒防抖且请求串行。修改周期从保存时重新计时，不立即发起请求。
 - 本地使用统计：Overview 提供总 Token、峰值日、会话、连续使用与 Daily / Weekly / Cumulative 活动图；Models 提供 7 天、30 天、全部时间的模型曲线、精确悬停值及输入/输出占比。本地统计无后台定时器，打开超过 60 秒后按需增量更新，或随详情面板手动刷新更新。
-- 跨平台构建：同一套前端 UI/动效代码输出 Windows unsigned 包和 macOS Universal unsigned 包。
+- 跨平台构建：同一套前端 UI/动效代码输出 Windows unsigned NSIS/MSI 安装包和 macOS Universal unsigned DMG。
 - 状态兜底：接口失败时保留上次成功数据并标记 stale；超过 30 分钟后停止展示旧数值；登录失效、限流、接口变形会给安全提示。
 - 重置卡到期提醒：摘要展示最早到期时间，并对剩余 3 天、2 天、1 天逐级调整文案和提示色；详情逐张展示使用期限，缺失日期时明确标记未知。
 - 偏好保存：悬浮窗可见性、锁定状态、置顶状态、固定 provider、轮播间隔、额度刷新周期和语言写入 Tauri app config 目录，带 `.bak` 备份恢复；旧配置缺少刷新字段时自动使用 5 分钟默认值。
@@ -40,7 +40,7 @@ Codex Halo 是一个 Tauri 2 桌面额度与本地使用统计工具，用本机
 - `src-tauri/src/usage_stats.rs`：只读增量扫描本机 Codex JSONL，保存不含正文的聚合索引。
 - `src-tauri/src/lib.rs`：唯一额度状态、刷新节奏与锁、菜单栏/托盘、详情面板、窗口生命周期和偏好持久化。
 - `src-tauri/src/geometry.rs`：多显示器、负坐标、工作区、边缘吸附和展开/收起几何。
-- `.github/workflows/release.yml`：生成 Windows unsigned 和 macOS Universal unsigned 发布包。
+- `.github/workflows/release.yml`：分别构建 Windows NSIS/MSI 与 macOS Universal DMG，并由单一 publish job 直接上传原生安装包。
 
 ## 数据与安全边界
 
